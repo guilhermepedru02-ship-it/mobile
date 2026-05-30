@@ -1,0 +1,38 @@
+# Dependências
+node_modules/
+jspm_packages/
+.pnpm-store/
+
+# Segurança e Chaves (CRÍTICO)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+cert.json
+service-account.json
+
+# Logs e Performance
+Logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache e Arquivos Temporários do Sistema
+.vector_cache.json
+.DS_Store
+Thumbs.db
+.cache/
+.tmp/
+temp/
+
+# Obsidian e Interface
+Cerebro/.obsidian/workspace.json
+Cerebro/.obsidian/graph.json
+Cerebro/.obsidian/appearance.json
+
+# Backups Locais (Já estarão no Git, não precisa de redundância .zip no repo)
+*.zip
+*.tar.gz
+*.7z
