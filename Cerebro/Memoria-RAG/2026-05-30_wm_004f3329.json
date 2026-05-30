@@ -1,0 +1,24 @@
+{
+  "task_id": "004f3329-440b-4503-bc58-006065f79ea1",
+  "task_description": "quais sao minhas tarefas pendentes?",
+  "started_at": "2026-05-30T07:15:39.011Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=TOOL_CALL, tool=kanban_read",
+      "timestamp": "2026-05-30T07:15:39.026Z"
+    },
+    {
+      "step": 2,
+      "action": "tool_exec:kanban_read",
+      "result": "# Kanban — Tarefas do Workspace\n\n## 📋 Backlog\n\n- [ ] Pós-estabilidade: configurar sincronização com repositório remoto privado (`https://github.com/guilhermepedru02-ship-it/mobile`)\n- [ ] Verificar s",
+      "timestamp": "2026-05-30T07:15:39.036Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T07:16:04.601Z",
+  "summary": "{\"step\":2,\"action\":\"tool_exec:kanban_read\",\"result\":\"# Kanban — Tarefas do Workspace\\n\\n## 📋 Backlog\\n\\n- [ ] Pós-estabilidade: configurar sincronização com repositório remoto privado (`https://github.com/guilhermepedru02-ship-it/mobile`)\\n- [ ] Verificar s\",\"timestamp\":\"2026-05-30T07:15:39.036Z\"}"
+}

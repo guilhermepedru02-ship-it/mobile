@@ -1,0 +1,24 @@
+{
+  "task_id": "50484498-4361-40db-bfe6-7170c91e6ac9",
+  "task_description": "quais são minhas tarefas pendentes?",
+  "started_at": "2026-05-30T05:08:07.671Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=TOOL_CALL, tool=kanban_read",
+      "timestamp": "2026-05-30T05:08:07.709Z"
+    },
+    {
+      "step": 2,
+      "action": "tool_exec:kanban_read",
+      "result": "{\"success\":false,\"error\":\"ACCESS DENIED (GATEKEEPER MCP): Voce nao leu as Diretivas do Sistema. Sua primeira acao deve ser usar 'read_file' no arquivo 'Cerebro/00_Sistema/README.md' para destravar a s",
+      "timestamp": "2026-05-30T05:08:07.719Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T05:08:08.091Z",
+  "summary": "Erro: fetch failed"
+}

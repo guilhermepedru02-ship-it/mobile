@@ -1,5 +1,9 @@
 # Preferências do Usuário
 
+[[02_Memoria/preferencias_usuario|preferencias_usuario]] - **segunda guia 
+
+
+
 ## Idioma
 - Comunicação em **Português (Brasil)**.
 - Código e variáveis em **Inglês**.

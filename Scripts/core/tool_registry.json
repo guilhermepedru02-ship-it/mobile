@@ -1,0 +1,209 @@
+{
+  "version": "2.2.0",
+  "description": "Catálogo de ferramentas do Chronos Local — atualizado 2026-05-30 (workspace_agent MCP universal adicionado)",
+  "mcp_servers": [
+    {
+      "name": "workspace_agent",
+      "description": "Mini-agente local para micro-tarefas de workspace. Use para: ler arquivos, escrever arquivos, executar scripts existentes, aplicar patches, rodar comandos shell e retornar stdout. NÃO use para raciocínio complexo ou decisões de arquitetura.",
+      "endpoint": "http://localhost:3333",
+      "type": "mcp_tool",
+      "available_routes": ["/read_file", "/write_file", "/append_file", "/delete_file", "/move_file", "/list_dir", "/run_script", "/shell_exec", "/apply_patch", "/health", "/capabilities"],
+      "started_by": "Scripts/bootstrap/03_start_services.sh",
+      "script": "Scripts/core/workspace_agent_server.js"
+    }
+  ],
+  "tools": [
+    {
+      "id": "self_health_check",
+      "description": "Auto-diagnóstico completo: RAM, CPU, uptime, status do llama-server e do agente",
+      "trigger_keywords": [
+        "saúde",
+        "health",
+        "como você está",
+        "como está o sistema",
+        "diagnóstico",
+        "auto-diagnóstico",
+        "estatísticas",
+        "performance",
+        "monitoramento"
+      ],
+      "type": "run_command",
+      "command": "echo '=== RAM ===' && free -h | grep Mem && echo '=== SWAP ===' && free -h | grep Swap && echo '=== UPTIME ===' && uptime && echo '=== LLM ===' && curl -s --max-time 2 http://127.0.0.1:11434/health && echo '' && echo '=== AGENTE ===' && curl -s --max-time 2 http://127.0.0.1:4001/ && echo '' && echo '=== WORKSPACE AGENT ===' && curl -s --max-time 2 http://127.0.0.1:3333/health && echo '' && echo '=== DISCO ===' && df -h /storage/emulated/0 | tail -1",
+      "output": "text"
+    },
+    {
+      "id": "tech_news",
+      "description": "Busca as últimas notícias de tecnologia em PT/BR via RSS",
+      "trigger_keywords": [
+        "notícias",
+        "tech",
+        "novidades",
+        "tecnologia",
+        "news"
+      ],
+      "type": "run_command",
+      "command": "python3 /storage/emulated/0/Workspace/Projetos/tech_scraper.py",
+      "output": "markdown"
+    },
+    {
+      "id": "kanban_read",
+      "description": "Lê o Kanban de tarefas atual do Workspace",
+      "trigger_keywords": [
+        "tarefas",
+        "kanban",
+        "pendências",
+        "backlog",
+        "o que falta",
+        "o que tenho"
+      ],
+      "type": "read_file",
+      "path": "Cerebro/03_Tarefas/kanban.md",
+      "output": "markdown"
+    },
+    {
+      "id": "git_status",
+      "description": "Mostra o status atual do repositório Git local",
+      "trigger_keywords": [
+        "git",
+        "commit",
+        "repositório",
+        "versionamento",
+        "mudanças",
+        "modifiquei"
+      ],
+      "type": "run_command",
+      "command": "git -C /storage/emulated/0/Workspace status",
+      "output": "text"
+    },
+    {
+      "id": "git_log",
+      "description": "Exibe os últimos 10 commits do repositório local",
+      "trigger_keywords": [
+        "histórico",
+        "commits",
+        "git log",
+        "últimas alterações"
+      ],
+      "type": "run_command",
+      "command": "git -C /storage/emulated/0/Workspace log --oneline -10",
+      "output": "text"
+    },
+    {
+      "id": "disk_usage",
+      "description": "Verifica o uso de armazenamento do dispositivo",
+      "trigger_keywords": [
+        "disco",
+        "armazenamento",
+        "espaço",
+        "memória interna",
+        "storage"
+      ],
+      "type": "run_command",
+      "command": "df -h /storage/emulated/0",
+      "output": "text"
+    },
+    {
+      "id": "ram_status",
+      "description": "Verifica o uso atual de RAM e Swap do dispositivo",
+      "trigger_keywords": [
+        "ram",
+        "memória",
+        "memory",
+        "uso de memória",
+        "quanto de ram"
+      ],
+      "type": "run_command",
+      "command": "free -h",
+      "output": "text"
+    },
+    {
+      "id": "llm_status",
+      "description": "Verifica se o llama-server está rodando e mostra o modelo ativo",
+      "trigger_keywords": [
+        "ia local",
+        "llm",
+        "llama",
+        "modelo",
+        "status da ia",
+        "está ativa",
+        "online"
+      ],
+      "type": "run_command",
+      "command": "curl -s http://127.0.0.1:11434/health && echo '' && curl -s http://127.0.0.1:4001/",
+      "output": "text"
+    },
+    {
+      "id": "list_tools",
+      "description": "Lista todas as ferramentas disponíveis para o agente",
+      "trigger_keywords": [
+        "ferramentas",
+        "comandos",
+        "o que você faz",
+        "o que você pode",
+        "capacidades",
+        "habilidades",
+        "ajuda"
+      ],
+      "type": "run_command",
+      "command": "python3 -c \"import json; r=json.load(open('/storage/emulated/0/Workspace/Scripts/core/tool_registry.json')); [print(f\\\"- {t['id']}: {t['description']}\\\") for t in r['tools']]\"",
+      "output": "text"
+    },
+    {
+      "id": "diary_today",
+      "description": "Lê a nota do diário do dia atual",
+      "trigger_keywords": [
+        "diário",
+        "nota de hoje",
+        "o que escrevi",
+        "meu diário"
+      ],
+      "type": "read_file",
+      "path": "Cerebro/04_Diario/__DATE__.md",
+      "dynamic": true,
+      "output": "markdown"
+    },
+    {
+      "id": "services_health",
+      "description": "Verifica a saúde de todos os serviços do Workspace",
+      "trigger_keywords": [
+        "serviços",
+        "stack",
+        "saúde do sistema",
+        "tudo ok",
+        "ws-status"
+      ],
+      "type": "run_command",
+      "command": "bash /storage/emulated/0/Workspace/Scripts/bootstrap/03_start_services.sh --status",
+      "output": "text"
+    },
+    {
+      "id": "memory_write",
+      "description": "Registra um aprendizado ou decisão na Memoria-RAG",
+      "trigger_keywords": [
+        "lembre",
+        "registra",
+        "anota",
+        "memoriza",
+        "salva isso",
+        "guarda"
+      ],
+      "type": "create_file",
+      "path": "Cerebro/Memoria-RAG/__DATE___agente_local.md",
+      "dynamic": true,
+      "output": "none"
+    },
+    {
+      "id": "workspace_agent_status",
+      "description": "Verifica se o workspace_agent_server está rodando na porta 3333",
+      "trigger_keywords": [
+        "workspace agent",
+        "agente universal",
+        "porta 3333",
+        "workspace_agent"
+      ],
+      "type": "run_command",
+      "command": "curl -s --max-time 3 http://127.0.0.1:3333/health",
+      "output": "text"
+    }
+  ]
+}

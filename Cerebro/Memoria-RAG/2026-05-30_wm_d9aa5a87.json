@@ -1,0 +1,18 @@
+{
+  "task_id": "d9aa5a87-2167-46cb-b57e-95039413be5b",
+  "task_description": "diga ola em uma frase",
+  "started_at": "2026-05-30T14:03:00.492Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=CREATIVE_TASK, tool=none",
+      "timestamp": "2026-05-30T14:03:00.548Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T14:03:18.085Z",
+  "summary": "Olá, eu sou o Agente Local do Workspace Mobile e estou pronto para dizer ola em uma frase."
+}

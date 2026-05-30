@@ -1,0 +1,18 @@
+{
+  "task_id": "be6c1dcb-2c43-4f84-9744-18ed9015719d",
+  "task_description": "o que foi feito na última sessão de trabalho?",
+  "started_at": "2026-05-30T17:05:15.648Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=CREATIVE_TASK, tool=none",
+      "timestamp": "2026-05-30T17:05:15.676Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T17:05:33.868Z",
+  "summary": "A tarefa em progresso é:\n\n**Passos concluídos:** {\"step\":1,\"action\":\"CREATIVE_TASK\",\"tool\":none,\"result\":\"intent=CREATIVE_TASK, tool=none\",\"timestamp\":\"2026-05-30T17:05:15.676Z\"}\n\nO objetivo é o de \"o que foi feito na última sessão de trabalho?\""
+}

@@ -1,0 +1,24 @@
+{
+  "task_id": "e7081a75-c607-4462-9012-4e23273fbe4d",
+  "task_description": "a ia local esta ativa",
+  "started_at": "2026-05-30T14:26:06.159Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=TOOL_CALL, tool=llm_status",
+      "timestamp": "2026-05-30T14:26:06.170Z"
+    },
+    {
+      "step": 2,
+      "action": "tool_exec:llm_status",
+      "result": "{\"status\":\"ok\"}\n{\"status\":\"Agente Local Online\",\"model\":\"qwen2.5-0.5b\",\"port\":4001}",
+      "timestamp": "2026-05-30T14:26:06.249Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T14:26:22.186Z",
+  "summary": "O llama-server está ativo e o modelo está disponível."
+}

@@ -41,3 +41,43 @@ ollama serve &
 curl -s http://localhost:11434/api/generate \
   -d '{"model":"llama3.2:1b","prompt":"Seu prompt","stream":false,"options":{"num_predict":50}}'
 ```
+
+---
+
+## [2026-05-30] Migração: Ollama + llama3.2:1b → llama-server + Qwen 2.5 0.5B Q4
+
+**Decisão:** Substituir Ollama (daemon) por `llama-server` (llama-cpp nativo no Termux) e trocar modelo.
+**Motivo:** llama3.2:1b travava o dispositivo ao ser carregado — ~970MB só para o modelo + Android + Termux + serviços excediam a RAM física de 3.7GB. Sem recuperação possível por software.
+
+### Novo Stack de Inferência
+| Métrica | Antes (Ollama) | Depois (llama-server) |
+|---|---|---|
+| Motor | Ollama 0.24.0 | llama-cpp (pkg b9360) |
+| Modelo | llama3.2:1b (1.3GB) | Qwen2.5 0.5B Q4_K_M (469MB) |
+| RAM do modelo | ~970MB | ~466MB |
+| RAM total do sistema | Saturava (crash) | ~2.0GB usados / 1.4GB livres |
+| Velocidade | ~0.5 tok/s | ~12 tok/s |
+| API | `/api/generate` (Ollama) | `/v1/chat/completions` (OpenAI-compat) |
+| Formato request | `{model, system, prompt}` | `{model, messages:[{role,content}]}` |
+| Parsing resposta | `data.response` | `data.choices[0].message.content` |
+| Porta | 11434 | 11434 (sem mudança) |
+| ctx-size | N/A | 1024 tokens |
+
+### Arquivos Modificados
+- `Scripts/core/ollama_agent.js` — URL, modelo, formato request/response, auto-unlock Gatekeeper no startup
+- `Scripts/core/mcp_generate_with_fallback.mjs` — URL, modelo, formato curl, critério de sucesso
+- `Scripts/core/context_builder.js` — RAG condicional (desativado quando há tool result), toolOutput truncado a 200 chars
+- `Scripts/core/start_llama_server.sh` — NOVO: script padronizado de inicialização
+
+### Comando de Inicialização (substitui `ollama serve`)
+```bash
+bash /storage/emulated/0/Workspace/Scripts/core/start_llama_server.sh
+# Ou diretamente:
+llama-server \
+  --model /storage/emulated/0/Workspace/Models/qwen2.5-0.5b-instruct-q4_k_m.gguf \
+  --ctx-size 1024 --port 11434 --host 127.0.0.1 \
+  --threads 4 --batch-size 64 --no-mmap
+```
+
+### Pendência Conhecida
+- llama-server não reinicia automaticamente após kill do Android — adicionar ao script de bootstrap.

@@ -1,0 +1,18 @@
+{
+  "task_id": "d8801b68-1b37-4a6b-bd12-ea65742d61a5",
+  "task_description": "oi?",
+  "started_at": "2026-05-30T07:44:37.256Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=CREATIVE_TASK, tool=none",
+      "timestamp": "2026-05-30T07:44:37.270Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T07:44:37.312Z",
+  "summary": "Erro: fetch failed"
+}

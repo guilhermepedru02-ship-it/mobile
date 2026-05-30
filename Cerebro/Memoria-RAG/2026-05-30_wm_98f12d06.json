@@ -1,0 +1,24 @@
+{
+  "task_id": "98f12d06-3a63-4748-b1ad-e3d3b90e3efa",
+  "task_description": "quais sao minhas tarefas pendentes?",
+  "started_at": "2026-05-30T07:00:37.497Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=TOOL_CALL, tool=kanban_read",
+      "timestamp": "2026-05-30T07:00:37.509Z"
+    },
+    {
+      "step": 2,
+      "action": "tool_exec:kanban_read",
+      "result": "# Kanban — Tarefas do Workspace\n\n## 📋 Backlog\n\n- [ ] Pós-estabilidade: configurar sincronização com repositório remoto privado (`https://github.com/guilhermepedru02-ship-it/mobile`)\n- [ ] Verificar s",
+      "timestamp": "2026-05-30T07:00:37.522Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T07:00:37.972Z",
+  "summary": "Erro: llama-server HTTP 400"
+}

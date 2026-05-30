@@ -1,0 +1,24 @@
+{
+  "task_id": "8cf0d0bc-dd9b-4fa3-b8b8-05e0ed866caa",
+  "task_description": "quais sao minhas tarefas pendentes?",
+  "started_at": "2026-05-30T07:04:52.381Z",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "dispatch",
+      "result": "intent=TOOL_CALL, tool=kanban_read",
+      "timestamp": "2026-05-30T07:04:52.398Z"
+    },
+    {
+      "step": 2,
+      "action": "tool_exec:kanban_read",
+      "result": "# Kanban — Tarefas do Workspace\n\n## 📋 Backlog\n\n- [ ] Pós-estabilidade: configurar sincronização com repositório remoto privado (`https://github.com/guilhermepedru02-ship-it/mobile`)\n- [ ] Verificar s",
+      "timestamp": "2026-05-30T07:04:52.409Z"
+    }
+  ],
+  "steps_pending": [],
+  "context_variables": {},
+  "status": "completed",
+  "finished_at": "2026-05-30T07:05:47.479Z",
+  "summary": "Erro: This operation was aborted"
+}
