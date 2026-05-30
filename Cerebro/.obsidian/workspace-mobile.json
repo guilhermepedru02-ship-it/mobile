@@ -139,12 +139,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "04_Diario/Limitação do Qwen 0.5 - o que isso nos diz sobre o raciocínio local atualmente.md",
+                "file": "03_Tarefas/kanban.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Limitação do Qwen 0.5 - o que isso nos diz sobre o raciocínio local atualmente"
+              "title": "kanban"
             }
           }
         ],
@@ -297,8 +297,9 @@
   },
   "active": "7990911855bc87ac",
   "lastOpenFiles": [
-    "04_Diario/2026-05-29.md",
+    "test.txt",
     "04_Diario/Limitação do Qwen 0.5 - o que isso nos diz sobre o raciocínio local atualmente.md",
+    "04_Diario/2026-05-29.md",
     "Sem título",
     "04_Diario/2026-05-30.md",
     "02_Memoria/preferencias_usuario.md",
@@ -326,7 +327,6 @@
     "01_Planejamento/Arquitetura_Dual_Server_v2.2.md",
     "01_Planejamento/Arquitetura_IA_Local_Soberana.md",
     "Memoria-RAG/2026-05-29_ia_local_soberana.md",
-    "Memoria-RAG/Guia_Agente_DevTools_v2.2.md",
     "Sem título.base"
   ]
 }

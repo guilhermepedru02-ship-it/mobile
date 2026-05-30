@@ -1,13 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import MiniSearch from 'minisearch';
 
 const WORKSPACE_ROOT = '/storage/emulated/0/Workspace';
 const RAG_DIR        = path.join(WORKSPACE_ROOT, 'Cerebro/Memoria-RAG');
 const PREFS_PATH     = path.join(WORKSPACE_ROOT, 'Cerebro/02_Memoria/preferencias_usuario.md');
+const CACHE_PATH     = path.join(WORKSPACE_ROOT, 'Cerebro', '.vector_cache.json');
 
 // ============================================================
-// SAÚDE DO SISTEMA — compacto (máx ~80 chars)
+// SAÚDE DO SISTEMA — compacto (ínax ~80 chars)
 // ============================================================
 function getSystemHealth() {
     try {
@@ -53,7 +55,26 @@ Resuma o resultado da ferramenta em portugues claro e direto para Guilherme. Nao
 }
 
 // ============================================================
-// RAG — apenas arquivos datados (YYYY-MM-DD_*), 1 nota
+// BUSCA SEMÂNTICA (MiniSearch) — contexto relevante por query
+// ============================================================
+function semanticSearch(query, topK = 2) {
+    if (!fs.existsSync(CACHE_PATH)) return null;
+    try {
+        const indexJson   = fs.readFileSync(CACHE_PATH, 'utf8');
+        const miniSearch  = MiniSearch.loadJSON(indexJson, {
+            fields: ['text'],
+            storeFields: ['file', 'text']
+        });
+        const results = miniSearch.search(query, { fuzzy: 0.2, prefix: true });
+        return results.slice(0, topK).map(r => ({
+            file: r.file,
+            excerpt: r.text.slice(0, 200)
+        }));
+    } catch { return null; }
+}
+
+// ============================================================
+// RAG RECENTE — fallback quando não há índice semântico
 // ============================================================
 function semanticChunking(content, maxChars = 300) {
     if (!content) return '';
@@ -69,12 +90,11 @@ function semanticChunking(content, maxChars = 300) {
 
 function loadRecentRAG(n = 1) {
     try {
-        // Filtra apenas arquivos com padrão de data YYYY-MM-DD no nome
         const datePattern = /^\d{4}-\d{2}-\d{2}_.*\.md$/;
         const files = fs.readdirSync(RAG_DIR)
             .filter(f => datePattern.test(f))
-            .sort()       // ordena por data (prefixo YYYY-MM-DD garante ordem correta)
-            .slice(-n);   // pega os mais recentes
+            .sort()
+            .slice(-n);
         return files.map(f => {
             const content = fs.readFileSync(path.join(RAG_DIR, f), 'utf8');
             return `[${f}]\n${semanticChunking(content, 280)}`;
@@ -87,8 +107,21 @@ function loadWorkingMemory() {
     if (!fs.existsSync(wmPath)) return '';
     try {
         const wm = JSON.parse(fs.readFileSync(wmPath, 'utf8'));
-        return `Tarefa ativa: "${wm.task_description.slice(0,80)}"`.trim();
+        return `Tarefa ativa: "${wm.task_description.slice(0, 80)}"`;
     } catch { return ''; }
+}
+
+// ============================================================
+// RAG CONTEXT BUILDER — semântico se possível, recente como fallback
+// ============================================================
+function buildRAGContext(userPrompt) {
+    // Tenta busca semântica primeiro (mais relevante)
+    const semantic = semanticSearch(userPrompt, 2);
+    if (semantic && semantic.length > 0) {
+        return semantic.map(r => `[${path.basename(r.file)}]\n${r.excerpt}`).join('\n---\n');
+    }
+    // Fallback: nota RAG mais recente
+    return loadRecentRAG(1);
 }
 
 // ============================================================
@@ -97,13 +130,14 @@ function loadWorkingMemory() {
 export function buildContext(userPrompt, tool = null) {
     const healthInfo  = getSystemHealth();
     const userProfile = loadUserProfile();
-    const ragContext  = tool ? '' : loadRecentRAG(1);
+    // Se há tool result no contexto, não carrega RAG (evita overflow de ctx)
+    const ragContext  = tool ? '' : buildRAGContext(userPrompt);
     const wmContext   = loadWorkingMemory();
     const toolContext = tool ? `Ferramenta: ${tool.id} | ${tool.description}` : '';
 
     const contextParts = [ragContext, wmContext, toolContext].filter(Boolean);
     const contextBlock = contextParts.length
-        ? `\n[CTX]${contextParts.join(' | ')}[/CTX]`
+        ? `\n[CTX]${contextParts.slice(0, 400).join(' | ')}[/CTX]`
         : '';
 
     return {
