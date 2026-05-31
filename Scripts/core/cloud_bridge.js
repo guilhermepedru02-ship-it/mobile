@@ -118,6 +118,38 @@ async function callAnthropic(backend, prompt) {
     };
 }
 
+
+// ============================================================
+// CHAMADA GEMINI (Google AI Studio)
+// ============================================================
+
+async function callGemini(backend, prompt) {
+    const apiKey = process.env[backend.api_key_env ?? 'GEMINI_API_KEY'];
+    if (!apiKey) throw new Error(`${backend.api_key_env ?? 'GEMINI_API_KEY'} nao configurada no .env.`);
+
+    const model = backend.model ?? 'gemini-2.0-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: backend.max_tokens ?? 1000 }
+        })
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const tokens = (data.usageMetadata?.promptTokenCount ?? 0) + (data.usageMetadata?.candidatesTokenCount ?? 0);
+    return { text, tokens };
+}
+
 // ============================================================
 // CHAMADA OPENAI-COMPAT GENÉRICA (Antigravity, Manus, etc.)
 // ============================================================
@@ -197,6 +229,8 @@ export async function consultExpertIA(prompt, context = '') {
         let result;
         if (backend.name === 'anthropic') {
             result = await callAnthropic(backend, fullPrompt);
+        } else if (backend.name === 'gemini') {
+            result = await callGemini(backend, fullPrompt);
         } else {
             result = await callOpenAICompat(backend, fullPrompt);
         }

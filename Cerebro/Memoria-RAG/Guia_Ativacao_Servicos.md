@@ -250,15 +250,15 @@ free -h                                 # RAM e Swap
 
 ## Sessões Manuais no Termux (sem usar `ws`)
 
-| Sessão | Serviço | Obrigatório? |
-|---|---|---|
-| 1 | `start_llama_server.sh` | Sim (IA local) |
-| 2 | `node workspace_agent_server.js` | Sim (MCP universal) |
-| 3 | `node ollama_agent.js` | Sim (Chronos Local) |
-| 4 | `node mcp_server.js` | Sim (IAs externas) |
-| 5 | `node bot.js` | Sim (Telegram) |
-| 6 | `node api_rest.js` | Opcional |
-| 7 | `start_tunnel.sh` | Opcional (IAs da nuvem sem USB) |
+| Sessão | Serviço                          | Obrigatório?                    |
+| ------ | -------------------------------- | ------------------------------- |
+| 1      | `start_llama_server.sh`          | Sim (IA local)                  |
+| 2      | `node workspace_agent_server.js` | Sim (MCP universal)             |
+| 3      | `node ollama_agent.js`           | Sim (Chronos Local)             |
+| 4      | `node mcp_server.js`             | Sim (IAs externas)              |
+| 5      | `node bot.js`                    | Sim (Telegram)                  |
+| 6      | `node api_rest.js`               | Opcional                        |
+| 7      | `start_tunnel.sh`                | Opcional (IAs da nuvem sem USB) |
 
 > **Mínimo para IA local offline:** sessões 1, 2, 3 e 4.
 

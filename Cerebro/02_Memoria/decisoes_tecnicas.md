@@ -52,3 +52,21 @@ Qualquer IA externa (Claude, Antigravity, Manus) usa o mesmo endpoint.
 **Decisão:** `silent_execution.enabled` alterado de `false` para `true`.
 **Motivação:** Permite que delegações assíncronas ocorram em segundo plano sem bloquear a interface do usuário.
 **Log:** `Logs/background_tasks.log`
+
+
+---
+
+## 2026-05-31 — Fix: Dispatch Unicode + RAG Blacklist + Keywords com acento
+
+**Problema detectado:** Interação do Telegram `/local diagnóstico` falhou em 3 níveis encadeados.
+
+**Bug 1 — dispatch.js:** `toLowerCase()` sem normalização Unicode. `"diagnóstico"` não casava com keyword `"diagnostico"`. Dispatch caía em `CREATIVE_TASK` sem ferramenta.
+**Correção:** Função `normalize()` com `NFD + \p{Diacritic}` aplicada em ambos os lados (prompt e keyword). Permanente e sistêmica.
+
+**Bug 2 — context_builder.js:** RAG indexava `00_Sistema/` (system_prompt, regras de segurança) e os injetava como contexto de resposta. Qwen confundia instruções operacionais com memória.
+**Correção:** `RAG_BLACKLIST` com `Cerebro/00_Sistema` e `Cerebro/01_Planejamento`. Filtro aplicado em `semanticSearch()` e pattern de `loadRecentRAG()` restrito a `.md` datados (exclui `wm_*.json`).
+
+**Bug 3 — tool_registry.json:** Keywords sem variantes acentuadas. `"diagnóstico"` (com acento) não estava listado.
+**Correção:** v2.5.0 — todas as tools receberam variantes Unicode completas. `self_health_check` especificamente: `"diagnóstico"`, `"saúde"`, `"faça um diagnóstico"`, etc.
+
+**Regra de governança estabelecida:** `00_Sistema/` e `01_Planejamento/` são meta-instruções do sistema — NUNCA contexto RAG. Apenas `Memoria-RAG/*.md` datados, `02_Memoria/preferencias_usuario.md` e `04_Diario/` são fontes válidas de contexto.

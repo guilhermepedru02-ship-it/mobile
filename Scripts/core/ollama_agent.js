@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -42,7 +43,7 @@ async function callOllama(system, prompt) {
                     { role: 'system', content: system },
                     { role: 'user',   content: prompt  }
                 ],
-                max_tokens:  128,
+                max_tokens:  400,
                 temperature: 0.3,
                 stream:      false
             })
@@ -109,14 +110,35 @@ export async function runAgent(userPrompt) {
         toolOutput = result.content || result.stdout || result.detail || JSON.stringify(result);
         completeStep(`tool_exec:${tool.id}`, toolOutput?.slice(0, 200));
         log(`TOOL RESULT: ${toolOutput?.slice(0, 100)}`);
+
+        // 3b. Bypass explícito para identity_check (sem LLM, resultado determinístico)
+        if (tool.id === 'identity_check' && toolOutput) {
+            log('DIRECT OUTPUT: identity_check (bypass explícito)');
+            completeStep('direct_output', 'identity_check');
+            finishTask(String(toolOutput).slice(0, 300));
+            return { success: true, intent, tool: tool.id, response: String(toolOutput), source: 'tool_direct' };
+        }
     }
 
-    // 4. Context Builder — montar prompt final
-    const toolSnippet = toolOutput ? toolOutput.slice(0, 200) : null;
-    const enrichedPrompt = toolSnippet
-        ? `${userPrompt}\n\nFerramenta "${tool.id}":\n${toolSnippet}`
-        : userPrompt;
-    const { system, prompt } = buildContext(enrichedPrompt, tool);
+
+    // 4b. DIRECT OUTPUT BYPASS — ferramentas deterministicas nao precisam do Qwen
+    // O output ja e texto legivel e enviamos direto sem gastar ctx-size
+    const DIRECT_OUTPUT_TOOLS = [
+        'identity_check', 'list_tools', 'ram_status', 'disk_usage', 'git_status', 'git_log',
+        'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
+        'cloud_usage', 'kanban_read', 'diary_today'
+    ];
+    if (intent === INTENT.TOOL_CALL && tool && toolOutput && DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
+        log('DIRECT OUTPUT: ' + tool.id + ' (sem LLM)');
+        completeStep('direct_output', tool.id);
+        finishTask(toolOutput.slice(0, 300));
+        return { success: true, intent, tool: tool.id, response: toolOutput, source: 'tool_direct' };
+    }
+
+    // 4. Context Builder — FIX v2.1: toolOutput injetado no system prompt
+    // O buildSynthesisPrompt recebe o output real e instrui o Qwen a apresenta-lo
+    // Isso impede que o modelo ignore ou alucine o resultado da ferramenta
+    const { system, prompt } = buildContext(userPrompt, tool, toolOutput);
     ragContext = prompt;
 
     // 5. Ollama — gerar resposta com retry
@@ -125,14 +147,70 @@ export async function runAgent(userPrompt) {
     let localSuccess = false;
     let lastError = '';
 
+
+    // ============================================================
+    // FORMAT RESPONSE — garante prefixo "Chronos:" e elimina
+    // respostas genericas de chatbot que o Qwen 0.5B costuma gerar
+    // quando o system prompt e ignorado.
+    // ============================================================
+    const GENERIC_PATTERNS = [
+        /^ol[aá]!?\s*(como posso ajudar|o que posso fazer)/i,
+        /^(oi|hey|ola),?\s*guilherme[!.]?\s*(como posso|o que)/i,
+        /^(claro|entendido|certo)[!.]\s*como posso/i,
+        /^(ol[aá]|oi)!?\s*como posso ajudar/i,
+    ];
+    function formatResponse(resp) {
+        if (!resp) return resp;
+        const r = resp.trim();
+        // Substitui respostas completamente genericas
+        if (GENERIC_PATTERNS.some(p => p.test(r))) {
+            return 'Chronos: Pronto. O que você precisa?';
+        }
+        // Garante prefixo "Chronos:" se ausente
+        if (!r.toLowerCase().startsWith('chronos')) {
+            return `Chronos: ${r}`;
+        }
+        return r;
+    }
+
+    // Heuristica de qualidade para KNOWLEDGE_QUERY (Qwen 0.5B)
+    // Detecta: repeticao excessiva de frases, respostas sobre hardware/software
+    // quando o prompt nao menciona isso, e densidade semantica baixa.
+    function isLowQuality(resp, userPrompt) {
+        if (!resp) return false;
+        const r = resp.toLowerCase();
+        const words = r.split(/\s+/).filter(w => w.length > 4);
+        // 1. Repeticao: mesma frase de 4+ palavras aparece 2+ vezes
+        const phrases = [];
+        for (let i = 0; i < words.length - 3; i++) {
+            phrases.push(words.slice(i, i+4).join(' '));
+        }
+        const seen = new Set();
+        for (const p of phrases) {
+            if (seen.has(p)) return true;
+            seen.add(p);
+        }
+        // 2. Resposta sobre hardware mobile/SSE quando prompt nao menciona
+        const techDrift = /(hardware mobile|SSE bridge|flexibilidade de ponte|estado de inatividade|flexiveis de ponte)/i;
+        if (techDrift.test(resp) && !/hardware|mobile|SSE|ponte/i.test(userPrompt)) return true;
+        // 3. Resposta muito curta para KNOWLEDGE_QUERY (< 20 chars uteis)
+        if (resp.trim().length < 20) return true;
+        return false;
+    }
+
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             const candidate = await callOllama(system, prompt);
             if (candidate && candidate.trim().length > 3) {
-                response = candidate;
-                localSuccess = true;
-                log(`OLLAMA OK (tentativa ${attempt}/${maxAttempts}): ${response.slice(0, 80)}`);
-                break;
+                if (intent === 'KNOWLEDGE_QUERY' && isLowQuality(candidate, userPrompt)) {
+                    lastError = `alucinacao detectada (tentativa ${attempt})`;
+                    log(`OLLAMA LOW_QUALITY (tentativa ${attempt}/${maxAttempts}): forcando fallback`);
+                } else {
+                    response = formatResponse(candidate);
+                    localSuccess = true;
+                    log(`OLLAMA OK (tentativa ${attempt}/${maxAttempts}): ${response.slice(0, 80)}`);
+                    break;
+                }
             }
             lastError = `resposta vazia (tentativa ${attempt})`;
             log(`OLLAMA VAZIO (tentativa ${attempt}/${maxAttempts})`);

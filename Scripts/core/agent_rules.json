@@ -1,8 +1,8 @@
 {
-  "version": "1.1.0",
-  "description": "Regras de delegação, retry e controle de custos para a Arquitetura do Enxame (FASE 3) — Chronos Local",
-  "updated_at": "2026-05-30",
-  "author": "Claude Sonnet 4.6 via sessão MCP",
+  "version": "1.2.0",
+  "description": "Regras de delegacao, retry e controle de custos para a Arquitetura do Enxame (FASE 3) — Chronos Local",
+  "updated_at": "2026-05-31",
+  "author": "Claude Sonnet 4.6 via sessao MCP",
 
   "retry_policy": {
     "max_local_attempts": 2,
@@ -13,14 +13,12 @@
   },
 
   "delegation_rules": {
-    "_comment": "Ferramentas determinísticas: SEMPRE local, nunca cloud",
     "always_local": [
       "ram_status", "disk_usage", "git_status", "git_log",
       "tech_news", "kanban_read", "diary_today",
       "llm_status", "services_health", "self_health_check",
       "workspace_agent_status", "list_tools", "memory_write"
     ],
-    "_comment2": "Tarefas de raciocínio pesado: preferem cloud quando disponível",
     "prefer_cloud": [
       "architecture_decision",
       "complex_debugging",
@@ -29,7 +27,6 @@
       "detailed_analysis",
       "milestone_planning"
     ],
-    "_comment3": "Tarefas híbridas: tenta local 2×, depois cloud como fallback",
     "auto": [
       "KNOWLEDGE_QUERY",
       "CODE_TASK",
@@ -39,13 +36,12 @@
 
   "cloud_backends": [
     {
-      "name": "anthropic",
-      "endpoint": "https://api.anthropic.com/v1/messages",
-      "model": "claude-sonnet-4-6-20250514",
+      "name": "gemini",
+      "model": "gemini-2.0-flash",
       "max_tokens": 1000,
       "priority": 1,
-      "api_key_env": "ANTHROPIC_API_KEY",
-      "_setup_note": "Definir ANTHROPIC_API_KEY no arquivo .env do Workspace antes de usar"
+      "api_key_env": "GEMINI_API_KEY",
+      "_setup_note": "Definir GEMINI_API_KEY no arquivo .env do Workspace antes de usar"
     }
   ],
 
@@ -53,14 +49,12 @@
     "max_cloud_calls_per_day": 20,
     "alert_at_percent": 80,
     "track_usage": true,
-    "usage_log": "Logs/cloud_usage.json",
-    "_note": "Aumentar max_cloud_calls_per_day se necessário, mas manter controle de custos"
+    "usage_log": "Logs/cloud_usage.json"
   },
 
   "silent_execution": {
     "enabled": true,
     "log_background_tasks": true,
-    "background_log": "Logs/background_tasks.log",
-    "_note": "Ativado em 2026-05-30: delegação assíncrona em segundo plano habilitada"
+    "background_log": "Logs/background_tasks.log"
   }
 }

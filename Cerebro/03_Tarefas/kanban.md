@@ -1,108 +1,84 @@
 # Kanban do Workspace Mobile
 
-> Atualizado em 30/05/2026 · Análise Massiva + zRAM + silent_execution implementados via sessão Claude.
+> Atualizado em 31/05/2026 · Leitura massiva via Claude MCP · Estado real do sistema após sessão de implementação 30-31/05.
 
 ---
 
 ## 🎯 Objetivos Atuais
-- Implementar o `workspace_agent` como ferramenta MCP universal acessível por todas as IAs. ✅ FASE 1 completa
-- Configurar Qwen 0.5B Q4 como executor local de micro-tarefas supervisionadas. ✅ FASE 2 arquivos criados
-- Implementar a Arquitetura do Enxame (`consult_expert_ia`) com gerente de custos. ✅ FASE 3 implementada
-- Solidificar a hierarquia de memória antes de retomar o Milestone 4.
-- Manter soberania de dados e eficiência do sistema Android.
+- Ativar `ANTHROPIC_API_KEY` no `.env` para ligar o cloud_bridge (FASE 3)
+- Validar Antigravity e Manus.IA no workspace_agent (porta 3333)
+- Testar ciclo completo: local fail → cloud fallback
+- Evoluir memória para embeddings vetoriais reais (FASE 4)
+- Iniciar Milestone 4: App React Native (FASE 5)
 
 ---
 
 ## 📋 Backlog
 
-### 🧹 FASE 0 — Limpeza e base
-- [x] **Ativar zRAM no Android** · Script `00_zram_setup.sh` criado com suporte a root (zRAM 1GB lz4) e sem root (swapfile 512MB). Executar manualmente no Termux: `bash Scripts/bootstrap/00_zram_setup.sh` (Claude, 30/05/2026)
-
-### 🔌 FASE 1 — workspace_agent: servidor MCP universal
-- [x] **Criar `workspace_agent_server.js`** · Servidor HTTP local na porta 3333. (Claude, 30/05/2026)
-- [x] **Implementar rota `read_file`** (Claude, 30/05/2026)
-- [x] **Implementar rota `run_script`** (Claude, 30/05/2026)
-- [x] **Implementar rota `shell_exec`** (Claude, 30/05/2026)
-- [x] **Implementar rota `apply_patch`** (Claude, 30/05/2026)
-- [x] **Implementar rotas de filesystem** · `write_file`, `move_file`, `delete_file`, `list_dir` (Claude, 30/05/2026)
-- [x] **Registrar `workspace_agent` no `tool_registry.json`** · v2.3.0, campo `mcp_servers`. (Claude, 30/05/2026)
-- [x] **Adicionar `workspace_agent_server.js` ao bootstrap** · Serviço [2/5] no `03_start_services.sh`. (Claude, 30/05/2026)
-- [x] **Documentar protocolo de payload e resposta** · `documentação/workspace_agent_protocol.md`. (Claude, 30/05/2026)
-- [x] **Validar acesso de Claude ao `workspace_agent`** · Prova real: sessão Claude 30/05/2026 leu/escreveu arquivos sem erros. ✅ CONFIRMADO
-- [ ] **Validar acesso de Antigravity ao `workspace_agent`** · Guilherme fará.
-- [ ] **Validar acesso de Manus.IA ao `workspace_agent`** · Guilherme fará.
-
-### 🤖 FASE 2 — Qwen 0.5B como executor do workspace_agent
-- [x] **`workspace_agent_qwen_executor.js` criado** · Bypass para payloads estruturados, Qwen para linguagem natural. (Claude, 30/05/2026)
-- [x] **`working_memory.js` criado e integrado** · startTask/completeStep/finishTask funcionando. (Claude, 30/05/2026)
-- [x] **Política de uso do Qwen definida** · Documentada no `workspace_agent_qwen_executor.js` (Claude, 30/05/2026)
-- [ ] **Testar ciclo completo supervisor-auxiliar** · Simular tarefa complexa: IA externa planeja → delega micro-tarefas → Qwen executa → IA valida → avança.
-- [ ] **Reiniciar `ollama_agent.js` e validar personalização do Chronos Local** · `cd Scripts/core && node ollama_agent.js`
-
-### 🪥 FASE 3 — Arquitetura do Enxame (consult_expert_ia)
-- [x] **`cloud_bridge.js` criado** · consultExpertIA, controle de custos, multi-backend. (Claude, 30/05/2026)
-- [x] **`agent_rules.json` criado** · Retry policy, delegation_rules, cloud_backends, cost_control. (Claude, 30/05/2026)
-- [x] **`agent_rules.json` v1.1.0** · `silent_execution.enabled` ativado para true. (Claude, 30/05/2026)
-- [x] **Ferramenta `consult_expert_ia` no `tool_registry.json`** · v2.3.0, entrada em `tools` + `mcp_servers`. (Claude, 30/05/2026)
-- [x] **Lógica de retry no `ollama_agent.js`** · Máximo 2 tentativas locais + fallback automático para cloud_bridge. (Claude, 30/05/2026)
-- [x] **`silent_execution` ativado** · `enabled: true` no agent_rules.json v1.1.0 (Claude, 30/05/2026)
-- [ ] **Configurar ANTHROPIC_API_KEY no .env** · Guilherme deve definir a variável para ativar o fallback cloud.
-- [ ] **Testar ciclo completo: local fail → cloud fallback** · Derrubar llama-server e verificar se cloud_bridge responde.
-
 ### 🧠 FASE 4 — Melhorias de memória
-- [x] **Hierarquia de memória: Curto Prazo (Working Memory)** · `working_memory.js` implementado. (Claude, 30/05/2026)
-- [x] **Hierarquia de memória: Médio Prazo (RAG)** · Memoria-RAG funcional com chunking semântico. (Claude, 30/05/2026)
-- [x] **Hierarquia de memória: Longo Prazo (Cérebro)** · Obsidian Vault em Cerebro/. (Guilherme, base)
-- [x] **MiniSearch (vector_db.js) integrado no context_builder.js** · Busca semântica com fallback para RAG recente. (Claude, 30/05/2026)
-- [x] **`decisoes_tecnicas.md` criado e populado** · Todas as decisões da sessão documentadas. (Claude, 30/05/2026)
-- [ ] **Embeddings vetoriais via `/v1/embeddings`** · Substituir MiniSearch por true embeddings quando hardware permitir.
-- [ ] **Filtro de data no RAG** · Decaimento temporal configurável.
-- [ ] **Reindexar Cerebro** · `node -e "import('./Scripts/core/vector_db.js').then(m => m.indexCerebro())"` no Termux.
+- [ ] **Embeddings vetoriais via `/v1/embeddings`** · Busca semântica real no RAG usando endpoint nativo do llama-server. Substituir MiniSearch (keyword) por vetores. Custo: ~50MB de armazenamento. Impacto alto.
+- [ ] **Hierarquia formal de memória** · Formalizar promoção entre camadas: working_memory (sessão) → Memoria-RAG (7 dias) → Cerebro/02_Memoria (longo prazo). Criar `Cerebro/05_Conhecimento/` para documentação permanente.
+- [ ] **Filtro de data e decaimento temporal no RAG** · Memórias recentes com peso maior. Decaimento configurável.
+- [ ] **Limpeza do Memoria-RAG** · 100+ arquivos `wm_*.json` fragmentados de sessões anteriores. Criar script de consolidação diária que agrega JSONs em um resumo único por dia.
 
-### 📱 FASE 5 — Milestone 4: App React Native (com nova arquitetura)
-> Só iniciar após FASE 1 e FASE 2 validadas em prod.
+### 📱 FASE 5 — Milestone 4: App React Native
+> Iniciar após validação end-to-end do ciclo supervisor-auxiliar em produção.
 - [ ] **Inicializar projeto React Native via DevTools.**
-- [ ] **Desenvolver estrutura básica do app** · Componentes, navegação.
-- [ ] **Implementar interface de chat conversacional.**
-- [ ] **Integrar comunicação com llama-server local** · Via HTTP, porta do llama-server.
-- [ ] **Implementar ativação de ferramentas via linguagem natural no App.**
-- [ ] **Integrar com API REST interna** · Porta 4000, autenticação Bearer Token.
+- [ ] **Desenvolver estrutura básica** · Componentes, navegação.
+- [ ] **Interface de chat conversacional.**
+- [ ] **Integrar com llama-server local** · HTTP porta 11434.
+- [ ] **Ativação de ferramentas por linguagem natural no App.**
+- [ ] **Integrar com API REST interna** · Porta 4000, Bearer Token.
 - [ ] **Backup, banco de dados local e testes.**
 
 ---
 
-## 🔨 Em Progresso (Guilherme executa no Termux)
-- [ ] **Executar zRAM** · `bash Scripts/bootstrap/00_zram_setup.sh` — script pronto, aguarda execução manual.
-- [ ] **Configurar ANTHROPIC_API_KEY no .env** · Requerido para cloud fallback funcionar.
-- [ ] **Reiniciar `ollama_agent.js` v2.0.0** · `cd Scripts/core && node ollama_agent.js`
-- [ ] **Reindexar o Cérebro** · `node -e "import('./Scripts/core/vector_db.js').then(m => m.indexCerebro())"`
-- [ ] **Git commit desta sessão** · zRAM script + agent_rules v1.1.0 + decisoes_tecnicas.md
-- [ ] **Testar ciclo completo supervisor-auxiliar** · FASE 2 validação.
-- [ ] **Validar acesso Antigravity/Manus.IA** · Guilherme fará.
+## 🔨 Em Progresso
+
+- [ ] **Adicionar `ANTHROPIC_API_KEY` ao `.env`** · Único bloqueador do cloud_bridge (FASE 3). Sem isso, a arquitetura do Enxame não dispara o fallback. `Scripts/core/cloud_bridge.js` já implementado e aguarda a chave.
+- [ ] **Git push para GitHub** · Commit local `50a7609` pendente de push. Inserir token uma vez para cachear. 17 arquivos, 1048 inserções.
+- [ ] **Validar acesso de Antigravity ao workspace_agent** · Endpoint porta 3333 já registrado no `tool_registry.json`. Falta teste end-to-end com Antigravity.
+- [ ] **Validar acesso de Manus.IA ao workspace_agent** · Idem Manus.
+- [ ] **Testar ciclo local fail → cloud fallback** · Derrubar llama-server, disparar prompt, verificar se cloud_bridge assume. Requer `ANTHROPIC_API_KEY` ativa.
 
 ---
 
 ## ✅ Concluído
-- [x] **FASE 0: Script zRAM criado** · `Scripts/bootstrap/00_zram_setup.sh` — root e sem-root. (Claude, 30/05/2026)
-- [x] **FASE 3: silent_execution ativado** · agent_rules.json v1.1.0 (Claude, 30/05/2026)
-- [x] **FASE 4: decisoes_tecnicas.md** · Memória de longo prazo documentada. (Claude, 30/05/2026)
-- [x] **FASE 3: cloud_bridge.js implementado** · consultExpertIA, cost_control, multi-backend Anthropic. (Claude, 30/05/2026)
-- [x] **FASE 3: agent_rules.json criado** · retry_policy, delegation_rules, cost_control. (Claude, 30/05/2026)
-- [x] **FASE 3: ollama_agent.js v2.0.0** · Retry 2× + fallback automático para cloud. (Claude, 30/05/2026)
-- [x] **FASE 3: tool_registry.json v2.3.0** · consult_expert_ia + cloud_bridge como mcp_server. (Claude, 30/05/2026)
-- [x] **FASE 4: context_builder.js com MiniSearch** · Busca semântica integrada. (Claude, 30/05/2026)
-- [x] **FASE 1: workspace_agent_server.js implementado** · v1.0.0, 9 rotas, porta 3333, bootstrap integrado, documentado. (Claude, 30/05/2026)
-- [x] **Validação Claude → workspace_agent** · Sessão real prova leitura/escrita de arquivos funcionando. (Claude, 30/05/2026)
-- [x] **Git commit — 108 arquivos** · Todas as sessões do dia 30/05/2026 versionadas. (Claude, 30/05/2026)
-- [x] **Remover Ollama e todas as dependências residuais** (30/05/2026)
-- [x] **Validar llama-server com Qwen 0.5B Q4_K_M** (30/05/2026)
-- [x] **Personalização Robusta do Chronos Local** (Claude, 30/05/2026)
-- [x] **Arquitetura do Mini-Agente documentada no diário** (Claude, 30/05/2026)
-- [x] **Chunking Semântico** no `context_builder.js`.
-- [x] **Análise Massiva do Sistema** (Manus, 30/05/2026).
-- [x] **Alinhamento do Cérebro** · Notas e protocolos atualizados para llama-server (Qwen 2.5).
-- [x] **Migração LLM COMPLETA** · Ollama → llama-server (Qwen 2.5).
+
+### FASE 0 — Limpeza e base
+- [x] **Remover Ollama e dependências residuais** · RAM liberada. (30/05/2026)
+- [x] **Validar llama-server com Qwen 0.5B Q4_K_M** · Operacional: porta 11434, ctx 1024, ~12 tok/s, RAM ≤ 1GB. (30/05/2026)
+- [x] **Ativar zRAM / swap** · Script `00_zram_setup.sh` criado. Android já possui 2.7GB de swap nativo. Swapfile 512MB criado em `~/.swapfile`. Sem root disponível — swapon bloqueado pelo sistema. Stack estável com swap nativo. (31/05/2026)
+
+### FASE 1 — workspace_agent: servidor MCP universal
+- [x] **Criar `workspace_agent_server.js`** · Servidor HTTP na porta 3333. Implementado e testado. (30/05/2026)
+- [x] **Implementar rotas de leitura e execução** · `read_file`, `run_script`, `shell_exec`, `apply_patch` — todas operacionais. (30/05/2026)
+- [x] **Implementar rotas de filesystem** · `write_file`, `append_file`, `delete_file`, `move_file`, `list_dir` — todas com retorno JSON estruturado. (30/05/2026)
+- [x] **Registrar no `tool_registry.json`** · v2.4.0 · Entrada `workspace_agent` com todas as rotas, description explícita e `type: mcp_tool`. Disponível para TODAS as IAs via MCP. (30/05/2026)
+- [x] **Adicionar ao bootstrap** · `03_start_services.sh` atualizado: workspace_agent é o `[2/5]` da ordem de inicialização, com `nohup` e health check. (31/05/2026)
+- [x] **Validar acesso de Claude ao workspace_agent** · Testado end-to-end: `read_file` do kanban e `shell_exec` de `free -h` — ambos OK. (31/05/2026)
+- [x] **Documentar protocolo** · `GET /capabilities` retorna JSON completo de todas as rotas, parâmetros e descrições. (30/05/2026)
+
+### FASE 2 — Qwen 0.5B como executor do workspace_agent
+- [x] **Criar `workspace_agent_qwen_executor.js`** · Política dual: payload estruturada → bypass direto (zero RAM extra); string em linguagem natural → Qwen interpreta e converte. (30/05/2026)
+- [x] **Definir política de uso do Qwen** · Instruções determinísticas: exec direto sem LLM. Instruções ambíguas: Qwen com temperatura 0.0 e max_tokens 80. (30/05/2026)
+- [x] **Implementar `working_memory` em tempo real** · `working_memory.js`: startTask, completeStep, finishTask, arquivamento automático na Memoria-RAG. Integrado ao ollama_agent.js. (30/05/2026)
+
+### FASE 3 — Arquitetura do Enxame
+- [x] **Criar `cloud_bridge.js`** · `consultExpertIA()`: seleção de backend por prioridade, controle de custos (20 chamadas/dia, alerta em 80%), log auditado, suporte a Anthropic e OpenAI-compat. (30/05/2026)
+- [x] **Adicionar `consult_expert_ia` no tool_registry** · Ferramenta registrada com trigger_keywords e description precisa sobre quando usar. (30/05/2026)
+- [x] **Lógica de retry (2×) + gerente de custos** · `agent_rules.json` v1.1.0: max 2 tentativas locais, `always_local` vs `prefer_cloud` vs `auto`, `delegation_rules` configuráveis. (30/05/2026)
+- [x] **Integrar fallback no ollama_agent.js** · Pipeline completo: dispatch → tool → retry local → cloud fallback → working_memory. Fonte da resposta rastreada (`local` / `cloud` / `tool_direct`). (31/05/2026)
+- [x] **Execução silenciosa ativada** · `silent_execution.enabled: true` no agent_rules.json. Log em `Logs/background_tasks.log`. (30/05/2026)
+
+### Concluídos anteriores
+- [x] **Personalização Robusta do Chronos Local** · `context_builder.js` com identidade, saúde real e perfil. `tool_registry.json` v2.1.0+. (30/05/2026)
+- [x] **Chunking Semântico** · Fragmentação por seções Markdown (##) no `context_builder.js`. (30/05/2026)
+- [x] **Reindexacão do Cérebro** · 308 chunks de 47 arquivos em 0.6s. Cache em `.vector_cache.json`. (31/05/2026)
+- [x] **Ciclo end-to-end do Agente Local validado** · Dispatch, tool call, synthesis, working memory — 4 prompts testados com sucesso. (31/05/2026)
+- [x] **Análise Massiva do Sistema** · Manus.IA 30/05/2026 + Claude 31/05/2026.
+- [x] **Migração LLM** · Ollama → llama-server (Qwen 2.5 0.5B Q4_K_M).
 - [x] **Milestones 0, 1, 2 e 3 COMPLETOS.**
-- [x] Ativação do Git Remoto e sincronização com GitHub.
+- [x] Git Remoto ativado + sincronização com GitHub (commit local pendente de push).
 - [x] DevTools v2.2 (Git, NPM, Python).
-- [x] API REST (porta 4000) com autenticação Bearer Token.
+- [x] API REST (porta 4000) com Bearer Token.
