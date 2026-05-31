@@ -25,14 +25,12 @@ const INTENT_KEYWORDS = {
 
 // ============================================================
 // NORMALIZAÇÃO UNICODE
-// Remove diacríticos antes do match — garante que "diagnóstico"
-// case com keyword "diagnostico" e vice-versa, de forma sistemática.
-// Aplica-se TANTO ao prompt do usuário QUANTO às keywords do registry.
+// Remove diacríticos — "diagnóstico" casa com "diagnostico"
 // ============================================================
 function normalize(str) {
     return str
-        .normalize('NFD')                      // decompõe caracteres acentuados
-        .replace(/\p{Diacritic}/gu, '')        // remove marcas diacríticas
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
         .toLowerCase();
 }
 
@@ -50,34 +48,50 @@ function resolveDate(str) {
 }
 
 // ============================================================
-// DISPATCH
+// MATCH DE KEYWORD — v2.1.0
 // ============================================================
-/**
- * Classifica o prompt do usuário e retorna { intent, tool | null }.
- *
- * Matching robusto:
- *   - Normalização Unicode em ambos os lados (prompt e keyword)
- *   - Word-boundary regex para evitar falsos positivos ("ram" em "ferramentas")
- *   - Exact-match como fallback ao regex
- *
- * @param  {string} prompt — Texto bruto do usuário
- * @returns {{ intent: string, tool: object|null }}
- */
+// Problema anterior: regex (^|[\s,!?])kw([\s,!?]|$) falhava quando:
+//   - prompt era exatamente a keyword (ex: "ram" → $ não batia)
+//   - keyword multi-palavra com espaços internos
+//   - boundary chars \s não incluíam todos os separadores reais
+//
+// Solução: substituímos o regex de boundary por três verificações
+// ordenadas por custo, sem regex complexo:
+//   1. Exact match (prompt normalizado === keyword normalizada)
+//   2. Substring com boundaries simples: espaços ao redor ou bordas
+//   3. includes() direto para keywords multi-palavra (>1 token)
+// ============================================================
+function keywordMatches(normalizedPrompt, normalizedKeyword) {
+    const p = normalizedPrompt;
+    const k = normalizedKeyword;
+
+    // 1. Match exato
+    if (p === k) return true;
+
+    // 2. Para keywords de uma só palavra: exige que seja token isolado
+    //    (não "ram" dentro de "ferramentas")
+    if (!k.includes(' ')) {
+        // boundary: início/fim de string ou caractere não-alfanumérico
+        const re = new RegExp('(?:^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-z0-9]|$)', 'u');
+        return re.test(p);
+    }
+
+    // 3. Keyword multi-palavra: substring simples (já é específica o suficiente)
+    return p.includes(k);
+}
+
+// ============================================================
+// DISPATCH v2.1.0
+// ============================================================
 export function dispatch(prompt) {
     const normalized = normalize(prompt);
     const registry   = loadRegistry();
 
     // 1. Casa com ferramenta do registry (tool call)
     for (const tool of registry.tools) {
-        const matched = tool.trigger_keywords.some(kw => {
-            const k  = normalize(kw);
-            // Word-boundary: evita que "ram" case dentro de "ferramentas"
-            const re = new RegExp(
-                '(^|[\\s,!?])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([\\s,!?]|$)',
-                'u'
-            );
-            return re.test(normalized) || normalized === k;
-        });
+        const matched = tool.trigger_keywords.some(kw =>
+            keywordMatches(normalized, normalize(kw))
+        );
         if (matched) {
             const resolvedTool = { ...tool };
             if (resolvedTool.path)    resolvedTool.path    = resolveDate(resolvedTool.path);

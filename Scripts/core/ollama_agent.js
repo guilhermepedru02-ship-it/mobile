@@ -60,6 +60,8 @@ async function callOllama(system, prompt) {
 
 // ==========================================
 // EXECUTOR DE FERRAMENTA
+// FIX v2.1.0: retorna o objeto result completo
+// para que o pipeline possa verificar result.success
 // ==========================================
 async function executeTool(tool) {
     const action = { type: tool.type };
@@ -81,7 +83,85 @@ function shouldDelegateToCloud(intent, tool, rules) {
 }
 
 // ==========================================
+// FORMAT RESPONSE — garante prefixo "Chronos:" e elimina
+// respostas genéricas de chatbot que o Qwen 0.5B costuma gerar
+// quando o system prompt é ignorado.
+// ==========================================
+const GENERIC_PATTERNS = [
+    /^ol[aá]!?\s*(como posso ajudar|o que posso fazer)/i,
+    /^(oi|hey|ola),?\s*guilherme[!.]?\s*(como posso|o que)/i,
+    /^(claro|entendido|certo)[!.]\s*como posso/i,
+    /^(ol[aá]|oi)!?\s*como posso ajudar/i,
+    // FIX Bug3: captura deriva emocional/off-topic do Qwen
+    /^como voc[eê] est[aá] se sentindo/i,
+    /^estou (bem|ótimo|ótima|pronto|pronta),?\s*(obrigad|como posso|o que)/i,
+    /^(é claro que|claro que)\s*(estou|sim|posso)/i,
+];
+
+function formatResponse(resp) {
+    if (!resp) return resp;
+    const r = resp.trim();
+    // Substitui respostas completamente genéricas
+    if (GENERIC_PATTERNS.some(p => p.test(r))) {
+        return 'Chronos: Pronto. O que você precisa?';
+    }
+    // Garante prefixo "Chronos:" se ausente
+    if (!r.toLowerCase().startsWith('chronos')) {
+        return `Chronos: ${r}`;
+    }
+    return r;
+}
+
+// ==========================================
+// HEURÍSTICA DE QUALIDADE — Qwen 0.5B
+// Detecta: repetição, tech drift, deriva emocional,
+// resposta JSON crua, e resposta irrelante ao tema.
+// FIX Bug3: adicionados detectores de deriva emocional e JSON cru.
+// ==========================================
+function isLowQuality(resp, userPrompt) {
+    if (!resp) return false;
+    const r = resp.toLowerCase();
+    const words = r.split(/\s+/).filter(w => w.length > 4);
+
+    // 1. Repetição: mesma frase de 4+ palavras aparece 2+ vezes
+    const phrases = [];
+    for (let i = 0; i < words.length - 3; i++) {
+        phrases.push(words.slice(i, i+4).join(' '));
+    }
+    const seen = new Set();
+    for (const p of phrases) {
+        if (seen.has(p)) return true;
+        seen.add(p);
+    }
+
+    // 2. Tech drift: resposta sobre hardware/SSE quando prompt não menciona
+    const techDrift = /(hardware mobile|SSE bridge|flexibilidade de ponte|estado de inatividade|flexiveis de ponte)/i;
+    if (techDrift.test(resp) && !/hardware|mobile|SSE|ponte/i.test(userPrompt)) return true;
+
+    // 3. Resposta muito curta para KNOWLEDGE_QUERY (< 20 chars úteis)
+    if (resp.trim().length < 20) return true;
+
+    // 4. FIX Bug3: Deriva emocional — Qwen respondendo "como se sente"
+    //    quando o usuário perguntou outra coisa
+    const emotionalDrift = /como voc[eê] est[aá] se sentindo|estou (bem|ótimo|pronto),? (obrigad|como posso|o que)/i;
+    if (emotionalDrift.test(resp) && !/sentindo|emoc|humor|como est[aá]/i.test(userPrompt)) return true;
+
+    // 5. FIX Bug3: Resposta começa com JSON cru (erro de ferramenta vazando)
+    const jsonLeak = /^\s*\{\s*"(success|error|type|code)"/;
+    if (jsonLeak.test(resp)) return true;
+
+    // 6. FIX Bug3: Resposta completamente fora do domínio
+    //    (Qwen falando de culinária, clima, esportes quando não perguntado)
+    const offTopic = /receita de|previsao do tempo|campeonato|resultado do jogo/i;
+    if (offTopic.test(resp) && !/receita|clima|tempo|campeonato|jogo/i.test(userPrompt)) return true;
+
+    return false;
+}
+
+// ==========================================
 // PIPELINE PRINCIPAL
+// FIX Bug2: validação de result.success após executeTool()
+// FIX Bug1: identity_check com shell inline (tool_registry já corrigido)
 // ==========================================
 export async function runAgent(userPrompt) {
     const logPath = path.join(WORKSPACE_ROOT, 'Logs/agent-audit.log');
@@ -92,7 +172,7 @@ export async function runAgent(userPrompt) {
     const rules = loadRules();
     const maxAttempts = rules.retry_policy?.max_local_attempts ?? 2;
 
-    // 1. Dispatch — classificar intençao e identificar ferramenta
+    // 1. Dispatch — classificar intenção e identificar ferramenta
     const { intent, tool } = dispatch(userPrompt);
     log(`DISPATCH: ${intent}${tool ? ` | TOOL: ${tool.id}` : ''}`);
 
@@ -101,18 +181,48 @@ export async function runAgent(userPrompt) {
     completeStep('dispatch', `intent=${intent}, tool=${tool?.id || 'none'}`);
 
     let toolOutput = null;
-    let ragContext  = '';
+    let toolFailed = false;
 
     // 3. Executar ferramenta se identificada
     if (intent === INTENT.TOOL_CALL && tool) {
         log(`EXECUTING TOOL: ${tool.id}`);
         const result = await executeTool(tool);
-        toolOutput = result.content || result.stdout || result.detail || JSON.stringify(result);
-        completeStep(`tool_exec:${tool.id}`, toolOutput?.slice(0, 200));
-        log(`TOOL RESULT: ${toolOutput?.slice(0, 100)}`);
+
+        // FIX Bug2: verificar se a ferramenta falhou antes de usar o output
+        toolFailed = result.success === false;
+
+        if (toolFailed) {
+            const errMsg = result.error || 'Ferramenta retornou falha sem detalhe.';
+            log(`TOOL FAILED: ${tool.id} — ${errMsg}`);
+            completeStep(`tool_exec:${tool.id}`, `FAILED: ${errMsg}`);
+
+            // Ferramentas de saída direta com falha: resposta amigável sem LLM
+            const DIRECT_OUTPUT_TOOLS = [
+                'identity_check', 'list_tools', 'ram_status', 'disk_usage', 'git_status', 'git_log',
+                'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
+                'cloud_usage', 'kanban_read', 'diary_today'
+            ];
+            if (DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
+                const friendlyError = `Chronos: Ferramenta "${tool.id}" indisponível. Erro: ${errMsg}`;
+                log(`DIRECT FAIL RESPONSE: ${tool.id}`);
+                finishTask(`Falha: ${errMsg}`);
+                return { success: false, intent, tool: tool.id, response: friendlyError, source: 'tool_error' };
+            }
+
+            // Para outras ferramentas: deixa pipeline continuar sem toolOutput
+            // (o LLM vai tentar responder com contexto RAG)
+            toolOutput = null;
+
+        } else {
+            // Sucesso: extrai o conteúdo legível do resultado
+            toolOutput = result.content || result.stdout || result.detail || JSON.stringify(result);
+            completeStep(`tool_exec:${tool.id}`, toolOutput?.slice(0, 200));
+            log(`TOOL SUCCESS: ${toolOutput?.slice(0, 100)}`);
+        }
 
         // 3b. Bypass explícito para identity_check (sem LLM, resultado determinístico)
-        if (tool.id === 'identity_check' && toolOutput) {
+        // Só executa se toolOutput foi preenchido (não falhou)
+        if (tool.id === 'identity_check' && toolOutput && !toolFailed) {
             log('DIRECT OUTPUT: identity_check (bypass explícito)');
             completeStep('direct_output', 'identity_check');
             finishTask(String(toolOutput).slice(0, 300));
@@ -120,26 +230,23 @@ export async function runAgent(userPrompt) {
         }
     }
 
-
-    // 4b. DIRECT OUTPUT BYPASS — ferramentas deterministicas nao precisam do Qwen
-    // O output ja e texto legivel e enviamos direto sem gastar ctx-size
+    // 4. DIRECT OUTPUT BYPASS — ferramentas determinísticas não precisam do Qwen
+    // Só aplica se toolOutput está preenchido (ferramenta teve sucesso)
     const DIRECT_OUTPUT_TOOLS = [
         'identity_check', 'list_tools', 'ram_status', 'disk_usage', 'git_status', 'git_log',
         'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
         'cloud_usage', 'kanban_read', 'diary_today'
     ];
-    if (intent === INTENT.TOOL_CALL && tool && toolOutput && DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
+    if (intent === INTENT.TOOL_CALL && tool && toolOutput && !toolFailed && DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
         log('DIRECT OUTPUT: ' + tool.id + ' (sem LLM)');
         completeStep('direct_output', tool.id);
         finishTask(toolOutput.slice(0, 300));
         return { success: true, intent, tool: tool.id, response: toolOutput, source: 'tool_direct' };
     }
 
-    // 4. Context Builder — FIX v2.1: toolOutput injetado no system prompt
-    // O buildSynthesisPrompt recebe o output real e instrui o Qwen a apresenta-lo
-    // Isso impede que o modelo ignore ou alucine o resultado da ferramenta
-    const { system, prompt } = buildContext(userPrompt, tool, toolOutput);
-    ragContext = prompt;
+    // 4b. Context Builder — toolOutput injetado no system prompt quando disponível
+    // Se a ferramenta falhou, toolOutput é null e o buildContext usa modo conversacional
+    const { system, prompt } = await buildContext(userPrompt, tool, toolOutput);
 
     // 5. Ollama — gerar resposta com retry
     log(`CALLING OLLAMA (max ${maxAttempts} tentativas)...`);
@@ -147,63 +254,12 @@ export async function runAgent(userPrompt) {
     let localSuccess = false;
     let lastError = '';
 
-
-    // ============================================================
-    // FORMAT RESPONSE — garante prefixo "Chronos:" e elimina
-    // respostas genericas de chatbot que o Qwen 0.5B costuma gerar
-    // quando o system prompt e ignorado.
-    // ============================================================
-    const GENERIC_PATTERNS = [
-        /^ol[aá]!?\s*(como posso ajudar|o que posso fazer)/i,
-        /^(oi|hey|ola),?\s*guilherme[!.]?\s*(como posso|o que)/i,
-        /^(claro|entendido|certo)[!.]\s*como posso/i,
-        /^(ol[aá]|oi)!?\s*como posso ajudar/i,
-    ];
-    function formatResponse(resp) {
-        if (!resp) return resp;
-        const r = resp.trim();
-        // Substitui respostas completamente genericas
-        if (GENERIC_PATTERNS.some(p => p.test(r))) {
-            return 'Chronos: Pronto. O que você precisa?';
-        }
-        // Garante prefixo "Chronos:" se ausente
-        if (!r.toLowerCase().startsWith('chronos')) {
-            return `Chronos: ${r}`;
-        }
-        return r;
-    }
-
-    // Heuristica de qualidade para KNOWLEDGE_QUERY (Qwen 0.5B)
-    // Detecta: repeticao excessiva de frases, respostas sobre hardware/software
-    // quando o prompt nao menciona isso, e densidade semantica baixa.
-    function isLowQuality(resp, userPrompt) {
-        if (!resp) return false;
-        const r = resp.toLowerCase();
-        const words = r.split(/\s+/).filter(w => w.length > 4);
-        // 1. Repeticao: mesma frase de 4+ palavras aparece 2+ vezes
-        const phrases = [];
-        for (let i = 0; i < words.length - 3; i++) {
-            phrases.push(words.slice(i, i+4).join(' '));
-        }
-        const seen = new Set();
-        for (const p of phrases) {
-            if (seen.has(p)) return true;
-            seen.add(p);
-        }
-        // 2. Resposta sobre hardware mobile/SSE quando prompt nao menciona
-        const techDrift = /(hardware mobile|SSE bridge|flexibilidade de ponte|estado de inatividade|flexiveis de ponte)/i;
-        if (techDrift.test(resp) && !/hardware|mobile|SSE|ponte/i.test(userPrompt)) return true;
-        // 3. Resposta muito curta para KNOWLEDGE_QUERY (< 20 chars uteis)
-        if (resp.trim().length < 20) return true;
-        return false;
-    }
-
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             const candidate = await callOllama(system, prompt);
             if (candidate && candidate.trim().length > 3) {
                 if (intent === 'KNOWLEDGE_QUERY' && isLowQuality(candidate, userPrompt)) {
-                    lastError = `alucinacao detectada (tentativa ${attempt})`;
+                    lastError = `qualidade baixa detectada (tentativa ${attempt})`;
                     log(`OLLAMA LOW_QUALITY (tentativa ${attempt}/${maxAttempts}): forcando fallback`);
                 } else {
                     response = formatResponse(candidate);
@@ -250,7 +306,6 @@ export async function runAgent(userPrompt) {
                 };
             }
         } else {
-            // Ferramenta determinística ou cloud desabilitado — reporta erro
             finishTask(`Erro local sem fallback: ${lastError}`);
             return {
                 success: false,
@@ -280,8 +335,8 @@ app.get('/', (req, res) => {
         status: 'Agente Local Online',
         model: OLLAMA_MODEL,
         port: AGENT_PORT,
-        version: '2.0.0',
-        features: ['retry', 'cloud_fallback', 'working_memory']
+        version: '2.1.0',
+        features: ['retry', 'cloud_fallback', 'working_memory', 'tool_error_guard', 'quality_filter_v2']
     });
 });
 
@@ -301,7 +356,7 @@ app.get('/status', (req, res) => {
     const rules = loadRules();
     res.json({
         agent: 'online',
-        version: '2.0.0',
+        version: '2.1.0',
         model: OLLAMA_MODEL,
         retry_policy: rules.retry_policy,
         cloud_fallback: !!rules.cloud_backends?.length,
@@ -324,7 +379,7 @@ unlockGatekeeper();
 app.listen(AGENT_PORT, '127.0.0.1', () => {
     const logPath = path.join(WORKSPACE_ROOT, 'Logs/agent-audit.log');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] Agente Local v2.0.0 iniciado na porta ${AGENT_PORT} (retry=${true}, cloud_fallback=${true})\n`, 'utf8');
-    console.log(`Agente Local v2.0.0 rodando em http://127.0.0.1:${AGENT_PORT}`);
-    console.log('Funcionalidades: retry=2, cloud_fallback=cloud_bridge, working_memory=ativo');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] Agente Local v2.1.0 iniciado na porta ${AGENT_PORT} (retry=2, cloud_fallback=true, tool_error_guard=true, quality_filter_v2=true)\n`, 'utf8');
+    console.log(`Agente Local v2.1.0 rodando em http://127.0.0.1:${AGENT_PORT}`);
+    console.log('Funcionalidades: retry=2, cloud_fallback=cloud_bridge, working_memory=ativo, tool_error_guard=ativo, quality_filter_v2=ativo');
 });

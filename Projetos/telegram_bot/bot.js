@@ -11,7 +11,7 @@ dotenv.config();
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const allowedChatId = parseInt(process.env.ALLOWED_CHAT_ID, 10);
-const anthropicKey = process.env.ANTHROPIC_API_KEY || null;
+const geminiKey = process.env.GEMINI_API_KEY || null;
 
 if (!token || !allowedChatId) {
   console.error('ERRO CRÍTICO: TELEGRAM_BOT_TOKEN ou ALLOWED_CHAT_ID não definidos no .env');
@@ -54,24 +54,31 @@ function checkPort(port) {
 }
 
 // ============================================================
-// IA EXTERNA — Claude (Anthropic API)
+// IA EXTERNA — Gemini (Google AI Studio)
+// MIGRADO: Anthropic → Gemini em 2026-05-31
+// GEMINI_API_KEY instalada e verificada no .env
+// Erro atual: quota do plano gratuito (reset à meia-noite)
 // ============================================================
 
-function askClaude(question) {
+async function askGemini(question) {
+  if (!geminiKey) throw new Error('GEMINI_API_KEY não configurada no .env.');
+
+  const model = 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: question }] }],
+    generationConfig: { maxOutputTokens: 1024 }
+  });
+
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: question }]
-    });
+    const urlObj = new URL(url);
     const options = {
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
         'Content-Length': Buffer.byteLength(body)
       }
     };
@@ -81,11 +88,20 @@ function askClaude(question) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          if (parsed.content && parsed.content[0] && parsed.content[0].text) {
-            resolve(parsed.content[0].text);
-          } else {
-            reject(new Error('Resposta inesperada da API: ' + data));
+          // Detecta erro de quota explicitamente
+          if (parsed.error) {
+            const code = parsed.error.code;
+            const msg = parsed.error.message || 'Erro desconhecido';
+            if (code === 429 || msg.toLowerCase().includes('quota')) {
+              reject(new Error('Quota do Gemini atingida (plano gratuito). Reset à meia-noite.'));
+            } else {
+              reject(new Error(`Gemini API erro ${code}: ${msg}`));
+            }
+            return;
           }
+          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) resolve(text);
+          else reject(new Error('Resposta inesperada do Gemini: ' + data.slice(0, 200)));
         } catch (e) { reject(e); }
       });
     });
@@ -96,7 +112,7 @@ function askClaude(question) {
 }
 
 // ============================================================
-// IA LOCAL — Agente Ollama (porta 4001)
+// IA LOCAL — Agente Local (porta 4001)
 // ============================================================
 
 function callLocalAgent(prompt) {
@@ -127,7 +143,7 @@ function callLocalAgent(prompt) {
   });
 }
 
-// Fallback inteligente: tenta agente local, cai no Claude se necessário
+// Fallback inteligente: tenta agente local, cai no Gemini se necessário
 async function askWithFallback(chatId, prompt) {
   try {
     const result = await callLocalAgent(prompt);
@@ -142,17 +158,16 @@ async function askWithFallback(chatId, prompt) {
       }
       return;
     }
-    // Agente retornou fallback explicitamente (Ollama offline)
     throw new Error(result.error || 'fallback solicitado pelo agente');
   } catch (err) {
     console.warn(`[LOCAL FALLBACK] ${err.message}`);
-    await bot.sendMessage(chatId, '\u26A0\uFE0F IA local indisponível. Redirecionando para Claude...');
-    if (!anthropicKey) {
-      return bot.sendMessage(chatId, '\u274C Claude também indisponível (API KEY ausente).');
+    await bot.sendMessage(chatId, '\u26A0\uFE0F IA local indisponível. Redirecionando para Gemini...');
+    if (!geminiKey) {
+      return bot.sendMessage(chatId, '\u274C Gemini também indisponível (GEMINI_API_KEY ausente).');
     }
     try {
-      const answer = await askClaude(prompt);
-      const header = '_\u2728 (via Claude \u2014 fallback automático)_\n\n';
+      const answer = await askGemini(prompt);
+      const header = '_\u2728 (via Gemini 2.0 Flash \u2014 fallback automático)_\n\n';
       const full = header + answer;
       const chunks = full.match(/.{1,4000}/gs) || [full];
       for (const chunk of chunks) {
@@ -161,7 +176,7 @@ async function askWithFallback(chatId, prompt) {
         );
       }
     } catch (e2) {
-      bot.sendMessage(chatId, '\u274C Todos os canais de IA indisponíveis. Tente novamente mais tarde.');
+      bot.sendMessage(chatId, `\u274C Todos os canais de IA indisponíveis.\n_${e2.message}_`, { parse_mode: 'Markdown' });
     }
   }
 }
@@ -191,8 +206,8 @@ bot.onText(/^\/start$/, (msg) => {
     '/tarefa [texto] \u2014 Adiciona nova tarefa ao Backlog',
     '/nota [texto] \u2014 Salva nota rápida no diário de hoje',
     '/noticias \u2014 Roda Tech Scraper PT/BR sob demanda',
-    '/local [prompt] \u2014 Consulta a IA local offline (Ollama)',
-    '/ia [pergunta] \u2014 Consulta o Claude diretamente',
+    '/local [prompt] \u2014 Consulta a IA local offline (Qwen 0.5B)',
+    '/ia [pergunta] \u2014 Consulta o Gemini 2.0 Flash diretamente',
     '/buscar [texto] \u2014 Busca semântica no Cérebro (RAG)',
     '/indexar \u2014 Reindexar o Cérebro para busca vetorial',
     '/backup \u2014 Envia .tar.gz com todo o Cérebro',
@@ -303,30 +318,33 @@ bot.onText(/^\/noticias$/, (msg) => {
 bot.onText(/^\/local (.+)/, async (msg, match) => {
   if (!isAuthorized(msg)) return;
   const prompt = match[1].trim();
-  bot.sendMessage(msg.chat.id, '\uD83E\uDDE0 Consultando IA local...');
+  bot.sendMessage(msg.chat.id, '\uD83E\uDDE0 Consultando IA local (Qwen 0.5B)...');
   await askWithFallback(msg.chat.id, prompt);
 });
 
 // ============================================================
-// COMANDO: /ia [pergunta] — CLAUDE DIRETO
+// COMANDO: /ia [pergunta] — GEMINI DIRETO
+// Migrado de Claude/Anthropic para Gemini 2.0 Flash em 31/05/2026
+// GEMINI_API_KEY configurada no .env ✔️
+// Erro de quota = plano gratuito esgotado (reset à meia-noite)
 // ============================================================
 
 bot.onText(/^\/ia (.+)/, async (msg, match) => {
   if (!isAuthorized(msg)) return;
-  if (!anthropicKey) {
-    return bot.sendMessage(msg.chat.id, '\u274C ANTHROPIC_API_KEY não configurada no .env.');
+  if (!geminiKey) {
+    return bot.sendMessage(msg.chat.id, '\u274C GEMINI_API_KEY não configurada no .env.');
   }
   const question = match[1].trim();
-  bot.sendMessage(msg.chat.id, '\uD83E\uDD14 Consultando o Claude...');
+  bot.sendMessage(msg.chat.id, '\uD83E\uDD14 Consultando Gemini 2.0 Flash...');
   try {
-    const answer = await askClaude(question);
+    const answer = await askGemini(question);
     const chunks = answer.match(/.{1,4000}/gs) || [answer];
     for (const chunk of chunks) {
       await bot.sendMessage(msg.chat.id, chunk).catch(() => bot.sendMessage(msg.chat.id, chunk));
     }
   } catch (e) {
     console.error('[IA ERROR]', e.message);
-    bot.sendMessage(msg.chat.id, '\u274C Erro ao consultar a IA:\n' + e.message);
+    bot.sendMessage(msg.chat.id, `\u274C Erro ao consultar Gemini:\n_${e.message}_`, { parse_mode: 'Markdown' });
   }
 });
 
@@ -385,6 +403,7 @@ bot.onText(/^\/buscar (.+)/, async (msg, match) => {
 
 // ============================================================
 // COMANDO: /status — TODOS OS SERVIÇOS
+// Atualizado: Anthropic → Gemini em 31/05/2026
 // ============================================================
 
 bot.onText(/^\/status$/, async (msg) => {
@@ -392,23 +411,32 @@ bot.onText(/^\/status$/, async (msg) => {
   const uptime = Math.floor((Date.now() - startTime) / 1000);
   const hours = Math.floor(uptime / 3600);
   const minutes = Math.floor((uptime % 3600) / 60);
-  const [mcpStatus, apiStatus, agentStatus, ollamaStatus] = await Promise.all([
+  const [mcpStatus, apiStatus, agentStatus, llmStatus] = await Promise.all([
     checkPort(3001),
     checkPort(4000),
     checkPort(4001),
     checkPort(11434)
   ]);
-  const iaStatus = anthropicKey ? '\uD83D\uDFE2 API KEY configurada' : '\uD83D\uDD34 API KEY ausente';
+
+  // Gemini: verifica chave e quota
+  let geminiStatus;
+  if (!geminiKey) {
+    geminiStatus = '\uD83D\uDD34 GEMINI_API_KEY ausente';
+  } else {
+    geminiStatus = '\uD83D\uDFE2 KEY ok (quota gratuita — pode estar esgotada)';
+  }
+
   const cachePath = path.join(WORKSPACE_ROOT, 'Cerebro', '.vector_cache.json');
   const ragStatus = fs.existsSync(cachePath) ? '\uD83D\uDFE2 Índice ativo' : '\uD83D\uDD34 Não indexado (/indexar)';
+
   const statusMsg = [
     '\u2699\uFE0F *Status do Sistema \u2014 Chronos v4*', '',
     `\uD83E\uDDE0 *Bot Uptime:* ${hours}h ${minutes}m`,
     `\uD83D\uDCE1 *MCP Server (3001):* ${mcpStatus}`,
     `\uD83C\uDF10 *API REST (4000):* ${apiStatus}`,
     `\uD83E\uDD16 *Agente Local (4001):* ${agentStatus}`,
-    `\uD83E\uDD99 *Ollama LLM (11434):* ${ollamaStatus}`,
-    `\uD83E\uDDE0 *Claude /ia:* ${iaStatus}`,
+    `\uD83E\uDD99 *llama-server (11434):* ${llmStatus}`,
+    `\uD83D\uDCA1 *Gemini /ia:* ${geminiStatus}`,
     `\uD83D\uDD0D *RAG Soberano:* ${ragStatus}`
   ].join('\n');
   bot.sendMessage(msg.chat.id, statusMsg, { parse_mode: 'Markdown' });
@@ -441,4 +469,4 @@ bot.onText(/^\/backup$/, (msg) => {
   });
 });
 
-console.log('\u2705 Chronos v4 (IA Local + RAG Soberano + Fallback Inteligente) iniciado.');
+console.log('\u2705 Chronos v4 (Qwen 0.5B local + Gemini fallback + RAG Soberano) iniciado.');

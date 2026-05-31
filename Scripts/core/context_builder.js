@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import MiniSearch from 'minisearch';
+import { search as vectorSearch } from './vector_db_v2.js';
 
 const WORKSPACE_ROOT = '/storage/emulated/0/Workspace';
 const RAG_DIR        = path.join(WORKSPACE_ROOT, 'Cerebro/Memoria-RAG');
@@ -99,21 +99,17 @@ function buildSynthesisPrompt(healthInfo, toolId, toolOutput) {
 }
 
 // ============================================================
-// BUSCA SEMANTICA (MiniSearch) — com filtro de blacklist
+// BUSCA SEMANTICA v2 — vetorial (embeddings) com fallback keyword
+// Delega ao vector_db_v2.js (FASE 4)
 // ============================================================
-function semanticSearch(query, topK = 2) {
-    if (!fs.existsSync(CACHE_PATH)) return null;
+async function semanticSearch(query, topK = 2) {
     try {
-        const indexJson  = fs.readFileSync(CACHE_PATH, 'utf8');
-        const miniSearch = MiniSearch.loadJSON(indexJson, {
-            fields: ['text'],
-            storeFields: ['file', 'text']
-        });
-        const results = miniSearch.search(query, { fuzzy: 0.2, prefix: true });
-        return results
+        const res = await vectorSearch(query, topK + 2);
+        if (!res.success || !res.results?.length) return null;
+        return res.results
             .filter(r => !isRAGBlacklisted(r.file))
             .slice(0, topK)
-            .map(r => ({ file: r.file, excerpt: r.text.slice(0, 200) }));
+            .map(r => ({ file: r.file, excerpt: r.excerpt ?? r.text?.slice(0, 200) ?? '', mode: res.mode }));
     } catch { return null; }
 }
 
@@ -155,8 +151,8 @@ function loadWorkingMemory() {
 }
 
 // RAG CONTEXT BUILDER
-function buildRAGContext(userPrompt) {
-    const semantic = semanticSearch(userPrompt, 2);
+async function buildRAGContext(userPrompt) {
+    const semantic = await semanticSearch(userPrompt, 2);
     if (semantic && semantic.length > 0) {
         return semantic.map(r => `[${path.basename(r.file)}]\n${r.excerpt}`).join('\n---\n');
     }
@@ -166,7 +162,7 @@ function buildRAGContext(userPrompt) {
 // ============================================================
 // EXPORT PRINCIPAL
 // ============================================================
-export function buildContext(userPrompt, tool = null, toolOutput = null) {
+export async function buildContext(userPrompt, tool = null, toolOutput = null) {
     const healthInfo  = getSystemHealth();
     const userProfile = loadUserProfile();
 
@@ -187,7 +183,7 @@ export function buildContext(userPrompt, tool = null, toolOutput = null) {
     }
 
     // Modo conversacional — RAG filtrado (sem instruções operacionais)
-    const ragContext = buildRAGContext(userPrompt);
+    const ragContext = await buildRAGContext(userPrompt);
     const wmContext  = loadWorkingMemory();
     const contextParts = [ragContext, wmContext].filter(Boolean);
     const contextBlock = contextParts.length

@@ -70,3 +70,19 @@ Qualquer IA externa (Claude, Antigravity, Manus) usa o mesmo endpoint.
 **Correção:** v2.5.0 — todas as tools receberam variantes Unicode completas. `self_health_check` especificamente: `"diagnóstico"`, `"saúde"`, `"faça um diagnóstico"`, etc.
 
 **Regra de governança estabelecida:** `00_Sistema/` e `01_Planejamento/` são meta-instruções do sistema — NUNCA contexto RAG. Apenas `Memoria-RAG/*.md` datados, `02_Memoria/preferencias_usuario.md` e `04_Diario/` são fontes válidas de contexto.
+
+---
+
+## 2026-05-31 — Cloud Bridge: Migração Anthropic → Gemini (Google AI Studio)
+
+**Contexto:** A integração cloud originalmente planejada usava `ANTHROPIC_API_KEY`. Durante a implementação real, foi configurada a `GEMINI_API_KEY` (Google AI Studio) no `.env` do Workspace.
+
+**Estado atual:**
+- `GEMINI_API_KEY`: ✅ instalada e verificada no `.env`
+- Backend ativo em `agent_rules.json`: `gemini` / `gemini-2.0-flash` / prioridade 1
+- Limite diário: 20 chamadas/dia (conservador para plano gratuito)
+- **Erro atual:** quota do plano gratuito do Google AI Studio — fallback inativo por quota, não por configuração
+
+**Decisão:** Manter Gemini como backend primário. Quando a quota diária resetar (meia-noite PT), o fallback funciona automaticamente. Para uso intensivo, considerar upgrade para plano pago do Google AI Studio.
+
+**Documentação corrigida:** README.md do 00_Sistema atualizado para refletir Gemini como cloud fallback.
