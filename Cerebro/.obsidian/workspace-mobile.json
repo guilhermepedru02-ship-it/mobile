@@ -139,12 +139,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "03_Tarefas/kanban.md",
+                "file": "Memoria-RAG/Guia_Ativacao_Servicos.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "kanban"
+              "title": "Guia_Ativacao_Servicos"
             }
           }
         ],
@@ -295,8 +295,19 @@
       "bases:Criar nova base": false
     }
   },
-  "active": "7990911855bc87ac",
+  "active": "ff498017d3e0330a",
   "lastOpenFiles": [
+    "Memoria-RAG/2026-05-31_wm_21e4cc30.json",
+    "02_Memoria/working_memory_active.json",
+    "00_Sistema/README.md",
+    "Memoria-RAG/Guia_Conexao_IAs_Web.md",
+    "Memoria-RAG/Guia_Ativacao_Servicos.md",
+    "03_Tarefas/kanban.md",
+    "Memoria-RAG/2026-05-30_wm_f274d465.json",
+    "Memoria-RAG/2026-05-30_wm_d185af86.json",
+    "Memoria-RAG/2026-05-30_wm_efdc9733.json",
+    "Memoria-RAG/2026-05-30_wm_e1d2ca14.json",
+    "Memoria-RAG/2026-05-30_analise_massiva_claude.md",
     "test.txt",
     "04_Diario/Limitação do Qwen 0.5 - o que isso nos diz sobre o raciocínio local atualmente.md",
     "04_Diario/2026-05-29.md",
@@ -306,13 +317,9 @@
     "00_Sistema/preferencias_usuario.md",
     "00_Sistema/seguranca.md",
     "00_Sistema/system_prompt.md",
-    "00_Sistema/README.md",
-    "03_Tarefas/kanban.md",
     "01_Planejamento/Planejamento para melhoria da Memória.md",
     "02_Memoria/Tendencias_Tech_2026-05-30.md",
     "Memoria-RAG/2026-05-30_wm_a957ac36.json",
-    "02_Memoria/working_memory_active.json",
-    "Memoria-RAG/Guia_Ativacao_Servicos.md",
     "Memoria-RAG/2026-05-30_wm_c52fb0f8.json",
     "01_Planejamento/Plano_Migracao_LLM_Qwen05B.md",
     "Memoria-RAG/2026-05-29_milestone3_chronos_v4.md",
@@ -325,8 +332,6 @@
     "Memoria-RAG/2026-05-29_milestone1_ollama_validado.md",
     "02_Memoria/decisoes_tecnicas.md",
     "01_Planejamento/Arquitetura_Dual_Server_v2.2.md",
-    "01_Planejamento/Arquitetura_IA_Local_Soberana.md",
-    "Memoria-RAG/2026-05-29_ia_local_soberana.md",
     "Sem título.base"
   ]
 }
