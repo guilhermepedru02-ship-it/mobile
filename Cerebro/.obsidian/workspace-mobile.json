@@ -297,12 +297,15 @@
   },
   "active": "ff498017d3e0330a",
   "lastOpenFiles": [
+    "03_Tarefas/kanban.md",
+    "00_Sistema/ferramentas_disponiveis.md",
+    "Memoria-RAG/2026-05-31_implementacao_completa.md",
+    "Memoria-RAG/Guia_Ativacao_Servicos.md",
+    "Memoria-RAG/2026-05-31_embeddings_pooling_fix.md",
     "Memoria-RAG/2026-05-31_wm_21e4cc30.json",
     "02_Memoria/working_memory_active.json",
     "00_Sistema/README.md",
     "Memoria-RAG/Guia_Conexao_IAs_Web.md",
-    "Memoria-RAG/Guia_Ativacao_Servicos.md",
-    "03_Tarefas/kanban.md",
     "Memoria-RAG/2026-05-30_wm_f274d465.json",
     "Memoria-RAG/2026-05-30_wm_d185af86.json",
     "Memoria-RAG/2026-05-30_wm_efdc9733.json",
@@ -329,9 +332,6 @@
     "Memoria-RAG/2026-05-29_milestone2_pipeline_concluido.md",
     "Memoria-RAG/2026-05-30_gatekeeper_reforco.md",
     "Memoria-RAG/2026-05-28_chronos_v2.md",
-    "Memoria-RAG/2026-05-29_milestone1_ollama_validado.md",
-    "02_Memoria/decisoes_tecnicas.md",
-    "01_Planejamento/Arquitetura_Dual_Server_v2.2.md",
-    "Sem título.base"
+    "Memoria-RAG/2026-05-29_milestone1_ollama_validado.md"
   ]
 }
