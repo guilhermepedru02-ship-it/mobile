@@ -1,11 +1,11 @@
 {
-  "version": "2.6.0",
-  "description": "Catalogo de ferramentas do Chronos Local v2.6.0 — identity_check + resposta formatada",
+  "version": "2.7.1",
+  "description": "Catalogo de ferramentas do Chronos Local v2.7.1 — identity_check JSON fix: aspas duplas escapadas",
   "updated_at": "2026-05-31",
   "mcp_servers": [
     {
       "name": "workspace_agent",
-      "description": "Mini-agente local para micro-tarefas de workspace. Use para: ler arquivos, escrever arquivos, executar scripts existentes, aplicar patches, rodar comandos shell e retornar stdout. NÃO use para raciocínio complexo ou decisões de arquitetura.",
+      "description": "Mini-agente local para micro-tarefas de workspace. Use para: ler arquivos, escrever arquivos, executar scripts existentes, aplicar patches, rodar comandos shell e retornar stdout. N\u00c3O use para racioc\u00ednio complexo ou decis\u00f5es de arquitetura.",
       "endpoint": "http://localhost:3333",
       "type": "mcp_tool",
       "available_routes": ["/read_file","/write_file","/append_file","/delete_file","/move_file","/list_dir","/run_script","/shell_exec","/apply_patch","/health","/capabilities"],
@@ -14,7 +14,7 @@
     },
     {
       "name": "cloud_bridge",
-      "description": "Ponte para IAs em nuvem (consult_expert_ia). Use quando o agente local falhar 2 vezes ou para tarefas de raciocínio pesado.",
+      "description": "Ponte para IAs em nuvem (consult_expert_ia). Use quando o agente local falhar 2 vezes ou para tarefas de racioc\u00ednio pesado.",
       "endpoint": "interno (import cloud_bridge.js)",
       "type": "local_module",
       "script": "Scripts/core/cloud_bridge.js",
@@ -24,26 +24,29 @@
   "tools": [
     {
       "id": "identity_check",
-      "description": "Apresenta a identidade completa do Chronos Local: nome, hardware, modelo, saude atual e missao. Resposta deterministica, sem LLM.",
+      "description": "Apresenta a identidade completa do Chronos Local: nome, hardware, modelo, saude atual, autonomia e missao. Resposta deterministica, sem LLM. CORRIGIDO v2.7.1: JSON fix aspas escapadas.",
       "trigger_keywords": [
         "quem e voce", "quem voce e", "quem e vc",
-        "quem voce esta", "quem e chronos",
+        "quem e chronos", "chronos quem", "chronos o que",
         "me apresente", "se apresente", "sua apresentacao", "se apresenta",
         "o que voce e", "o que e o chronos",
         "seu nome e", "como voce se chama",
-        "chronos quem", "chronos o que",
         "o que voce monitora", "voce esta monitorando",
         "me fale sobre voce", "descreva voce",
         "identidade", "identidade chronos",
-        "quem sou eu para voce"
+        "quem sou eu para voce",
+        "possui autonomia", "tem autonomia",
+        "autonomia local", "funciona offline", "funciona sem internet",
+        "o que voce pode", "como voce funciona",
+        "nivel de autonomia", "grau de autonomia"
       ],
       "type": "run_command",
-      "command": "python3 /storage/emulated/0/Workspace/Scripts/core/identity_report.py",
+      "command": "echo '=== CHRONOS LOCAL ===' && echo 'Motor: llama-server | Modelo: Qwen 2.5 0.5B Q4_K_M | Alvo: ~12 tok/s' && echo 'Hardware: Android 3.7GB RAM | Workspace: /storage/emulated/0/Workspace' && echo 'Arquiteto: Guilherme Moreno' && echo 'Missao: Soberania de dados | Zero lixo eletronico | Eficiencia maxima' && echo '=== AUTONOMIA ===' && echo 'Modo: LOCAL SOBERANO — operacoes basicas sem dependencia de nuvem' && echo 'Soberania: dados nao saem do Android' && echo 'Ferramentas: RAM, disco, git, noticias, kanban, diario, servicos, cloud (fallback)' && echo '=== SAUDE ===' && date '+Data: %Y-%m-%d %H:%M' && free -h | grep '^Mem' && (curl -s --max-time 1 http://127.0.0.1:11434/health > /dev/null 2>&1 && echo 'llama-server: ONLINE' || echo 'llama-server: OFFLINE')",
       "output": "text"
     },
     {
       "id": "consult_expert_ia",
-      "description": "Delega uma tarefa ou pergunta complexa para uma IA externa (Claude via API). Use quando o agente local não conseguiu responder após 2 tentativas, ou quando a tarefa requer raciocínio arquitetural profundo.",
+      "description": "Delega uma tarefa ou pergunta complexa para uma IA externa (Claude via API). Use quando o agente local n\u00e3o conseguiu responder ap\u00f3s 2 tentativas, ou quando a tarefa requer racioc\u00ednio arquitetural profundo.",
       "trigger_keywords": [
         "consulta IA", "delega para cloud", "pergunta para o claude",
         "precisa de ajuda externa", "tarefa complexa", "analise profunda", "consult_expert"
@@ -55,7 +58,7 @@
     },
     {
       "id": "cloud_usage",
-      "description": "Verifica o uso de chamadas cloud hoje e o limite diário configurado",
+      "description": "Verifica o uso de chamadas cloud hoje e o limite di\u00e1rio configurado",
       "trigger_keywords": [
         "uso cloud", "quanto gastei", "chamadas cloud", "limite cloud", "custo ia"
       ],
@@ -65,7 +68,7 @@
     },
     {
       "id": "self_health_check",
-      "description": "Auto-diagnóstico completo: RAM, CPU, uptime, status do llama-server e do agente",
+      "description": "Auto-diagn\u00f3stico completo: RAM, CPU, uptime, status do llama-server e do agente",
       "trigger_keywords": [
         "saude", "health",
         "como voce esta", "como esta o sistema",
@@ -80,7 +83,7 @@
     },
     {
       "id": "tech_news",
-      "description": "Busca as últimas notícias de tecnologia em PT/BR via RSS",
+      "description": "Busca as \u00faltimas not\u00edcias de tecnologia em PT/BR via RSS",
       "trigger_keywords": [
         "noticias", "tech", "novidades", "tecnologia", "news"
       ],
@@ -90,7 +93,7 @@
     },
     {
       "id": "kanban_read",
-      "description": "Lê o Kanban de tarefas atual do Workspace",
+      "description": "L\u00ea o Kanban de tarefas atual do Workspace",
       "trigger_keywords": [
         "tarefas", "kanban", "pendencias", "backlog", "o que falta", "o que tenho"
       ],
@@ -100,7 +103,7 @@
     },
     {
       "id": "git_status",
-      "description": "Mostra o status atual do repositório Git local",
+      "description": "Mostra o status atual do reposit\u00f3rio Git local",
       "trigger_keywords": [
         "git", "commit", "repositorio", "versionamento", "mudancas", "modifiquei"
       ],
@@ -110,7 +113,7 @@
     },
     {
       "id": "git_log",
-      "description": "Exibe os últimos 10 commits do repositório local",
+      "description": "Exibe os \u00faltimos 10 commits do reposit\u00f3rio local",
       "trigger_keywords": [
         "historico", "commits", "git log", "ultimas alteracoes"
       ],
@@ -140,7 +143,7 @@
     },
     {
       "id": "llm_status",
-      "description": "Verifica se o llama-server está rodando e mostra o modelo ativo",
+      "description": "Verifica se o llama-server est\u00e1 rodando e mostra o modelo ativo",
       "trigger_keywords": [
         "ia local", "llm", "llama", "modelo", "status da ia", "esta ativa", "online"
       ],
@@ -150,7 +153,7 @@
     },
     {
       "id": "list_tools",
-      "description": "Lista todas as ferramentas disponíveis para o agente",
+      "description": "Lista todas as ferramentas dispon\u00edveis para o agente",
       "trigger_keywords": [
         "ferramentas", "listar ferramentas", "liste ferramentas", "lista de ferramentas",
         "suas ferramentas", "quais ferramentas", "comandos",
@@ -166,7 +169,7 @@
     },
     {
       "id": "diary_today",
-      "description": "Lê a nota do diário do dia atual",
+      "description": "L\u00ea a nota do di\u00e1rio do dia atual",
       "trigger_keywords": [
         "diario", "nota de hoje", "o que escrevi", "meu diario"
       ],
@@ -177,7 +180,7 @@
     },
     {
       "id": "services_health",
-      "description": "Verifica a saúde de todos os serviços do Workspace",
+      "description": "Verifica a sa\u00fade de todos os servi\u00e7os do Workspace",
       "trigger_keywords": [
         "servicos", "stack", "saude do sistema", "tudo ok", "ws-status",
         "status dos servicos", "servicos ativos", "o que esta rodando", "portas ativas"
@@ -188,7 +191,7 @@
     },
     {
       "id": "memory_write",
-      "description": "Registra um aprendizado ou decisão na Memoria-RAG",
+      "description": "Registra um aprendizado ou decis\u00e3o na Memoria-RAG",
       "trigger_keywords": [
         "lembre", "registra", "anota", "memoriza", "salva isso", "guarda"
       ],
@@ -199,7 +202,7 @@
     },
     {
       "id": "workspace_agent_status",
-      "description": "Verifica se o workspace_agent_server está rodando na porta 3333",
+      "description": "Verifica se o workspace_agent_server est\u00e1 rodando na porta 3333",
       "trigger_keywords": [
         "workspace agent", "agente universal", "porta 3333", "workspace_agent"
       ],

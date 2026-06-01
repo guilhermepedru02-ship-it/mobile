@@ -5,6 +5,7 @@
 # Uso: bash 03_start_services.sh
 #      bash 03_start_services.sh --status    (só checa saúde)
 #      bash 03_start_services.sh --restart   (mata tudo e reinicia)
+# v2.1: --embeddings --pooling mean adicionados ao llama-server
 # =============================================================
 
 CORE="/storage/emulated/0/Workspace/Scripts/core"
@@ -14,7 +15,7 @@ BOT="/storage/emulated/0/Workspace/Projetos/telegram_bot"
 
 mkdir -p "$LOGS"
 
-# ── Cores para output ──────────────────────────────────────────────
+# ── Cores para output ───────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 ok()  { echo -e "${GREEN}  [OK]${NC} $1"; }
 warn(){ echo -e "${YELLOW}  [!!]${NC} $1"; }
@@ -26,13 +27,21 @@ check_port() {
   return $?
 }
 
-# ── Modo --status ──────────────────────────────────────────────
+# ── Modo --status ────────────────────────────────────────────
 if [ "$1" = "--status" ]; then
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "  Workspace — Saúde dos Serviços"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   check_port 11434 health && ok "llama-server       (11434)" || fail "llama-server       (11434) — MORTO"
+  # Verifica se embeddings estão ativos (pooling mean)
+  if curl -s --max-time 2 -X POST http://127.0.0.1:11434/v1/embeddings \
+     -H 'Content-Type: application/json' \
+     -d '{"model":"qwen2.5-0.5b","input":"test"}' 2>/dev/null | grep -q 'embedding'; then
+    ok "  └─ embeddings /v1/embeddings (pooling=mean)"
+  else
+    warn "  └─ embeddings indisponível (reiniciar com --pooling mean)"
+  fi
   check_port 3333  health && ok "Workspace Agent    (3333)"  || fail "Workspace Agent    (3333)  — MORTO"
   check_port 4001  ""     && ok "Agente Local       (4001)"  || fail "Agente Local       (4001)  — MORTO"
   check_port 3001  health && ok "MCP Server         (3001)"  || warn "MCP Server         (3001)  — inativo"
@@ -58,13 +67,13 @@ if [ "$1" = "--restart" ]; then
   ok "Serviços encerrados. Reiniciando..."
 fi
 
-# ── INÍCIO DA SUBIDA ─────────────────────────────────────────────
+# ── INÍCIO DA SUBIDA ───────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Workspace Mobile — Inicializando"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# ── [1/5] llama-server ──────────────────────────────────────────
+# ── [1/5] llama-server (com embeddings + pooling mean) ─────────────────
 if check_port 11434 health; then
   ok "llama-server já ativo (11434)"
 else
@@ -72,7 +81,7 @@ else
     fail "Modelo não encontrado: $MODEL"
     exit 1
   fi
-  echo "  Subindo llama-server..."
+  echo "  Subindo llama-server (embeddings + pooling mean)..."
   nohup llama-server \
     --model "$MODEL" \
     --ctx-size 1024 \
@@ -81,12 +90,14 @@ else
     --threads 4 \
     --batch-size 64 \
     --no-mmap \
+    --embeddings \
+    --pooling mean \
     > "$LOGS/llama_server.log" 2>&1 &
   for i in $(seq 1 15); do
     sleep 1
     check_port 11434 health && break
   done
-  check_port 11434 health && ok "llama-server online (11434)" || { fail "llama-server falhou. Ver $LOGS/llama_server.log"; exit 1; }
+  check_port 11434 health && ok "llama-server online (11434) [embeddings+pooling=mean]" || { fail "llama-server falhou. Ver $LOGS/llama_server.log"; exit 1; }
 fi
 
 # ── [2/5] Workspace Agent Server (MCP Universal) ─────────────────
@@ -100,7 +111,7 @@ else
   check_port 3333 health && ok "Workspace Agent online (3333)" || warn "Workspace Agent lento — verificar $LOGS/workspace_agent.log"
 fi
 
-# ── [3/5] Agente Local ──────────────────────────────────────────
+# ── [3/5] Agente Local ───────────────────────────────────────────────
 if check_port 4001 ""; then
   ok "Agente Local já ativo (4001)"
 else
@@ -111,7 +122,7 @@ else
   check_port 4001 "" && ok "Agente Local online (4001)" || warn "Agente Local lento — verificar $LOGS/agent.log"
 fi
 
-# ── [4/5] MCP Server ─────────────────────────────────────────────
+# ── [4/5] MCP Server ─────────────────────────────────────────────────
 if check_port 3001 health; then
   ok "MCP Server já ativo (3001)"
 else
@@ -122,7 +133,7 @@ else
   check_port 3001 health && ok "MCP Server online (3001)" || warn "MCP Server — verificar $LOGS/mcp_server.log"
 fi
 
-# ── [5/5] Bot Telegram ──────────────────────────────────────────
+# ── [5/5] Bot Telegram ──────────────────────────────────────────────
 if ps aux | grep -q '[b]ot.js'; then
   ok "Bot Telegram já ativo"
 else
@@ -133,9 +144,11 @@ else
   ps aux | grep -q '[b]ot.js' && ok "Bot Telegram online" || warn "Bot Telegram — verificar $LOGS/bot.log"
 fi
 
-# ── Resumo final ──────────────────────────────────────────────
+# ── Resumo final ────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 free -h | grep Mem | awk '{printf "  RAM: %s usado / %s dispon\303\255vel\n", $3, $7}'
+echo "  [OK] Embedding RAG: após reiniciar, rodar reindexacao v2:"
+echo "  node -e \"import('./Scripts/core/vector_db_v2.js').then(m=>m.indexCerebro())\""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

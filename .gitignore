@@ -21,18 +21,32 @@ yarn-error.log*
 
 # Cache e Arquivos Temporários do Sistema
 .vector_cache.json
+.vector_cache_v2.json
 .DS_Store
 Thumbs.db
 .cache/
 .tmp/
 temp/
 
-# Obsidian e Interface
+# Working Memory — JSONs individuais de sessão (ruído para o Git)
+# São consolidados diariamente em *_consolidated.md
+Cerebro/Memoria-RAG/*_wm_*.json
+
+# Arquivos de desenvolvimento/debug temporários
+Scripts/core/nohup_v3.out
+Scripts/core/core
+Scripts/core/patch_*.py
+Scripts/core/_test_payload.json
+Scripts/core/test_*.mjs
+Scripts/core/test_*.js
+
+# Obsidian — estado local da interface (não versionável)
 Cerebro/.obsidian/workspace.json
+Cerebro/.obsidian/workspace-mobile.json
 Cerebro/.obsidian/graph.json
 Cerebro/.obsidian/appearance.json
 
-# Backups Locais (Já estarão no Git, não precisa de redundância .zip no repo)
+# Backups Locais
 *.zip
 *.tar.gz
 *.7z

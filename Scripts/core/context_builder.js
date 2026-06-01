@@ -6,7 +6,6 @@ import { search as vectorSearch } from './vector_db_v2.js';
 const WORKSPACE_ROOT = '/storage/emulated/0/Workspace';
 const RAG_DIR        = path.join(WORKSPACE_ROOT, 'Cerebro/Memoria-RAG');
 const PREFS_PATH     = path.join(WORKSPACE_ROOT, 'Cerebro/02_Memoria/preferencias_usuario.md');
-const CACHE_PATH     = path.join(WORKSPACE_ROOT, 'Cerebro', '.vector_cache.json');
 
 // ============================================================
 // RAG BLACKLIST — instruções operacionais nunca viram contexto
@@ -54,53 +53,55 @@ function loadUserProfile() {
 // ============================================================
 // SYSTEM PROMPTS
 // ------------------------------------------------------------
-// DESIGN PRINCIPLE: Qwen 0.5B não mantém personas abstratas.
-// Funciona muito melhor com TEMPLATES DE OUTPUT — instrucoes
-// explícitas de COMO FORMATAR a resposta, não de "quem ser".
-// Toda instrução aqui é comportamental e literal, não semântica.
+// DESIGN PRINCIPLE v2.2.0:
+//   - Removidos marcadores [CTX]...[/CTX] — o Qwen 0.5B os reproduzia
+//     literalmente nas respostas, gerando alucinacoes.
+//   - Contexto RAG é injetado como texto plano após linha em branco,
+//     com prefixo legivel (MEMORIA RECENTE:, FERRAMENTA:, etc.)
+//   - O system prompt é mantido curto (<300 tokens) para não
+//     esgotar a janela de contexto do modelo 0.5B.
 // ============================================================
 
 function buildSystemPrompt(healthInfo, userProfile) {
     return (
-        `IDENTIDADE: Voce e CHRONOS LOCAL — guardiao soberano do Workspace Mobile de Guilherme Moreno.\n` +
-        `Motor: llama-server | Modelo: Qwen 2.5 0.5B Q4_K_M | ${healthInfo}\n` +
-        `Guilherme: ${userProfile}\n` +
+        `IDENTIDADE: Voce e CHRONOS LOCAL, assistente soberano do Workspace de Guilherme Moreno.\n` +
+        `Motor: llama-server + Qwen 2.5 0.5B | ${healthInfo}\n` +
         `\n` +
-        `FORMATO OBRIGATORIO — siga isso SEMPRE:\n` +
-        `- Comece TODA resposta com "Chronos:" (nunca omita isso)\n` +
-        `- Maximo 3 frases. Direto, tecnico, sem enrolacao.\n` +
-        `- NUNCA diga "Ola", "Como posso ajudar" ou "Claro!". Isso e proibido.\n` +
-        `- Se perguntarem seu nome: "Chronos Local, guardiao do Workspace de Guilherme."\n` +
-        `- Se perguntarem sua saude: reporte exatamente "${healthInfo}"\n` +
-        `- Se nao souber algo: "Chronos: Nao tenho esse dado agora. Tente /diagnostico ou /status."\n` +
-        `- NUNCA gere JSON. NUNCA invente dados. Sempre em portugues.`
+        `REGRAS ABSOLUTAS:\n` +
+        `1. Comece TODA resposta com "Chronos:" sem excecao.\n` +
+        `2. Maximo 3 frases. Direto e tecnico.\n` +
+        `3. NUNCA diga "Ola", "Como posso ajudar", "Claro!" ou similares.\n` +
+        `4. NUNCA reproduza nomes de variaveis, caminhos de arquivo ou marcadores do sistema.\n` +
+        `5. Se nao souber: responda exatamente "Chronos: Sem dados. Use /status ou /diagnostico."\n` +
+        `6. Sempre em portugues. Nunca gere JSON bruto.`
     );
 }
 
 function buildSynthesisPrompt(healthInfo, toolId, toolOutput) {
-    // Handler especial para list_tools: instrui formatacao de lista limpa
     if (toolId === 'list_tools') {
         return (
             `IDENTIDADE: Voce e CHRONOS LOCAL. ${healthInfo}\n` +
-            `Abaixo esta a lista EXATA das suas ferramentas (output real do sistema).\n` +
-            `Apresente comeando com "Chronos — ferramentas disponíveis:" e liste de forma organizada.\n` +
-            `NAO invente ferramentas. NAO adicione itens. Apenas formate o que esta abaixo.\n` +
-            `OUTPUT:\n${toolOutput || '(lista indisponivel)'}`
+            `\n` +
+            `A seguir esta a lista completa de ferramentas do sistema.\n` +
+            `Apresente comeando com "Chronos - ferramentas disponíveis:" e liste de forma organizada.\n` +
+            `NAO invente ferramentas. Formate apenas o que esta abaixo.\n` +
+            `\n` +
+            `FERRAMENTAS:\n${toolOutput || '(lista indisponivel)'}`
         );
     }
-    // Handler geral: Chronos [tool_id]: resultado claro
     return (
         `IDENTIDADE: Voce e CHRONOS LOCAL. ${healthInfo}\n` +
-        `A ferramenta "${toolId}" executou e retornou os dados abaixo.\n` +
+        `\n` +
+        `A ferramenta "${toolId}" executou com sucesso.\n` +
         `Apresente o resultado comeando com "Chronos [${toolId}]:" de forma clara e objetiva.\n` +
-        `Nao invente nada. Nao gere JSON. Maximo 4 frases em portugues.\n` +
-        `RESULTADO DA FERRAMENTA:\n${(toolOutput || '(sem output)').slice(0, 450)}`
+        `Maximo 4 frases em portugues. Nao invente nada. Nao gere JSON.\n` +
+        `\n` +
+        `RESULTADO:\n${(toolOutput || '(sem output)').slice(0, 500)}`
     );
 }
 
 // ============================================================
-// BUSCA SEMANTICA v2 — vetorial (embeddings) com fallback keyword
-// Delega ao vector_db_v2.js (FASE 4)
+// BUSCA SEMANTICA v2 — vetorial com fallback keyword
 // ============================================================
 async function semanticSearch(query, topK = 2) {
     try {
@@ -114,7 +115,7 @@ async function semanticSearch(query, topK = 2) {
 }
 
 // RAG recente — fallback quando sem índice semântico
-// Somente .md datados (YYYY-MM-DD_*), sem wm_*.json
+// Somente .md datados consolidados (YYYY-MM-DD_consolidated.md)
 function semanticChunking(content, maxChars = 300) {
     if (!content) return '';
     const sections = content.split(/(?=^## )/m);
@@ -129,14 +130,19 @@ function semanticChunking(content, maxChars = 300) {
 
 function loadRecentRAG(n = 1) {
     try {
+        // Prioriza arquivos consolidados, depois qualquer .md datado
+        const consolidatedPattern = /^\d{4}-\d{2}-\d{2}_consolidated\.md$/;
         const mdPattern = /^\d{4}-\d{2}-\d{2}_(?!wm_).*\.md$/;
-        const files = fs.readdirSync(RAG_DIR)
-            .filter(f => mdPattern.test(f))
-            .sort()
-            .slice(-n);
+
+        const all = fs.readdirSync(RAG_DIR).sort();
+        const files = [
+            ...all.filter(f => consolidatedPattern.test(f)),
+            ...all.filter(f => mdPattern.test(f) && !consolidatedPattern.test(f))
+        ].slice(-n);
+
         return files.map(f => {
             const content = fs.readFileSync(path.join(RAG_DIR, f), 'utf8');
-            return `[${f}]\n${semanticChunking(content, 280)}`;
+            return `MEMORIA [${f}]:\n${semanticChunking(content, 280)}`;
         }).join('\n---\n');
     } catch { return ''; }
 }
@@ -146,7 +152,7 @@ function loadWorkingMemory() {
     if (!fs.existsSync(wmPath)) return '';
     try {
         const wm = JSON.parse(fs.readFileSync(wmPath, 'utf8'));
-        return `Tarefa ativa: "${wm.task_description.slice(0, 80)}"`;
+        return `TAREFA ATIVA: "${wm.task_description.slice(0, 80)}"`;
     } catch { return ''; }
 }
 
@@ -154,7 +160,9 @@ function loadWorkingMemory() {
 async function buildRAGContext(userPrompt) {
     const semantic = await semanticSearch(userPrompt, 2);
     if (semantic && semantic.length > 0) {
-        return semantic.map(r => `[${path.basename(r.file)}]\n${r.excerpt}`).join('\n---\n');
+        return semantic
+            .map(r => `MEMORIA [${path.basename(r.file)}]:\n${r.excerpt}`)
+            .join('\n---\n');
     }
     return loadRecentRAG(1);
 }
@@ -166,7 +174,7 @@ export async function buildContext(userPrompt, tool = null, toolOutput = null) {
     const healthInfo  = getSystemHealth();
     const userProfile = loadUserProfile();
 
-    // Modo síntese: system prompt JA contém o output da ferramenta
+    // Modo síntese: system prompt ja contem o output da ferramenta
     if (tool && toolOutput) {
         return {
             system: buildSynthesisPrompt(healthInfo, tool.id, toolOutput),
@@ -174,20 +182,22 @@ export async function buildContext(userPrompt, tool = null, toolOutput = null) {
         };
     }
 
-    // Ferramenta identificada mas output ainda não disponível
+    // Ferramenta identificada mas output ainda nao disponivel
     if (tool && !toolOutput) {
         return {
             system: buildSystemPrompt(healthInfo, userProfile),
-            prompt: `${userPrompt}\n[CTX]Ferramenta selecionada: ${tool.id} | ${tool.description}[/CTX]`
+            prompt: `${userPrompt}\n\nFERRAMENTA SELECIONADA: ${tool.id}\nDESCRICAO: ${tool.description}`
         };
     }
 
-    // Modo conversacional — RAG filtrado (sem instruções operacionais)
+    // Modo conversacional — RAG filtrado (sem instrucoes operacionais)
     const ragContext = await buildRAGContext(userPrompt);
     const wmContext  = loadWorkingMemory();
+
     const contextParts = [ragContext, wmContext].filter(Boolean);
+    // Contexto como texto plano após linha em branco — sem tags XML
     const contextBlock = contextParts.length
-        ? `\n[CTX]${contextParts.join(' | ').slice(0, 350)}[/CTX]`
+        ? `\n\n${contextParts.join('\n').slice(0, 400)}`
         : '';
 
     return {
