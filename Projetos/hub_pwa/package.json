@@ -1,0 +1,15 @@
+{
+  "name": "hub-pwa",
+  "version": "1.0.0",
+  "description": "Hub PWA do Workspace Mobile — painel unificado de status, bridge e kanban",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "dotenv": "^17.4.2"
+  }
+}

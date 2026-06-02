@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0d1117">
+  <title>Workspace Hub — Chronos Local</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">⚡</div>
+      <div>
+        <div class="header-title">Workspace Hub</div>
+        <div class="header-sub">Chronos Local — Android Bridge</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="bridgeDot" title="Bridge"></div>
+      <span class="status-label" id="bridgeLabel">Bridge</span>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Painel</button>
+    <button class="tab" data-tab="bridge">Bridge</button>
+    <button class="tab" data-tab="kanban">Kanban</button>
+    <button class="tab" data-tab="audit">Auditoria</button>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TAB: PAINEL -->
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="section-title">📊 Status do Sistema</div>
+      <div class="card-grid" id="statusCards">
+        <div class="card" id="card-battery">
+          <div class="card-icon">🔋</div>
+          <div class="card-label">Bateria</div>
+          <div class="card-value" id="val-battery">--</div>
+          <div class="card-sub" id="sub-battery">--</div>
+        </div>
+        <div class="card" id="card-wifi">
+          <div class="card-icon">📡</div>
+          <div class="card-label">Wi-Fi</div>
+          <div class="card-value" id="val-wifi">--</div>
+          <div class="card-sub" id="sub-wifi">--</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:24px">🛠️ Serviços</div>
+      <div class="services-list" id="servicesList">
+        <div class="service-row">
+          <span class="svc-name">llama-server</span>
+          <span class="svc-port">:11434</span>
+          <span class="svc-dot" id="svc-llama">...</span>
+        </div>
+        <div class="service-row">
+          <span class="svc-name">MCP Server</span>
+          <span class="svc-port">:3001</span>
+          <span class="svc-dot" id="svc-mcp">...</span>
+        </div>
+        <div class="service-row">
+          <span class="svc-name">workspace_agent</span>
+          <span class="svc-port">:3333</span>
+          <span class="svc-dot" id="svc-agent">...</span>
+        </div>
+        <div class="service-row">
+          <span class="svc-name">API REST</span>
+          <span class="svc-port">:4000</span>
+          <span class="svc-dot" id="svc-api">...</span>
+        </div>
+        <div class="service-row">
+          <span class="svc-name">Android Bridge</span>
+          <span class="svc-port">:4444</span>
+          <span class="svc-dot" id="svc-bridge">...</span>
+        </div>
+        <div class="service-row">
+          <span class="svc-name">Hub PWA</span>
+          <span class="svc-port">:5555</span>
+          <span class="svc-dot running">● online</span>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="App.refreshDashboard()">Atualizar</button>
+    </section>
+
+    <!-- TAB: BRIDGE -->
+    <section id="tab-bridge" class="tab-content">
+      <div class="section-title">🌉 Android Bridge — Controles</div>
+
+      <div class="bridge-section">
+        <div class="bridge-title">📥 Leitura</div>
+
+        <div class="bridge-row">
+          <button class="btn btn-primary" onclick="App.bridge('battery')">Bateria</button>
+          <button class="btn btn-primary" onclick="App.bridge('wifi')">Wi-Fi</button>
+          <button class="btn btn-primary" onclick="App.bridge('clipboard/get')">Clipboard</button>
+        </div>
+      </div>
+
+      <div class="bridge-section">
+        <div class="bridge-title">📤 Notificação</div>
+        <input class="input" id="notif-title" placeholder="Título da notificação" />
+        <textarea class="input textarea" id="notif-content" placeholder="Conteúdo..."></textarea>
+        <button class="btn btn-write" onclick="App.sendNotification()">Enviar Notificação</button>
+      </div>
+
+      <div class="bridge-section">
+        <div class="bridge-title">🔊 Text-to-Speech</div>
+        <input class="input" id="tts-text" placeholder="Texto para falar..." />
+        <button class="btn btn-write" onclick="App.sendTTS()">Falar</button>
+      </div>
+
+      <div class="bridge-section">
+        <div class="bridge-title">📱 Abrir App</div>
+        <input class="input" id="intent-pkg" placeholder="com.exemplo.app" />
+        <button class="btn btn-write" onclick="App.openApp()">Abrir</button>
+      </div>
+
+      <div class="section-title" style="margin-top:20px">📄 Resposta</div>
+      <pre class="output" id="bridgeOutput">(aguardando...)</pre>
+    </section>
+
+    <!-- TAB: KANBAN -->
+    <section id="tab-kanban" class="tab-content">
+      <div class="section-title">📋 Kanban</div>
+      <div class="kanban-note">Lido diretamente do Cerebro/03_Tarefas/kanban.md via MCP.</div>
+      <pre class="output kanban-output" id="kanbanOutput">(carregando...)</pre>
+      <button class="btn btn-secondary" onclick="App.loadKanban()">Recarregar</button>
+    </section>
+
+    <!-- TAB: AUDITORIA -->
+    <section id="tab-audit" class="tab-content">
+      <div class="section-title">🔏 Log de Auditoria</div>
+      <div class="audit-note">Requer X-Owner-Key para exibir. Configure no localStorage.</div>
+
+      <div class="bridge-section">
+        <input class="input" id="owner-key" type="password" placeholder="X-Owner-Key (BRIDGE_OWNER_KEY)" />
+        <button class="btn btn-primary" onclick="App.loadAudit()">Carregar Log</button>
+      </div>
+
+      <pre class="output audit-output" id="auditOutput">(aguardando credencial...)</pre>
+    </section>
+
+  </main>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

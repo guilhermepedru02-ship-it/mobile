@@ -86,3 +86,45 @@ Qualquer IA externa (Claude, Antigravity, Manus) usa o mesmo endpoint.
 **Decisão:** Manter Gemini como backend primário. Quando a quota diária resetar (meia-noite PT), o fallback funciona automaticamente. Para uso intensivo, considerar upgrade para plano pago do Google AI Studio.
 
 **Documentação corrigida:** README.md do 00_Sistema atualizado para refletir Gemini como cloud fallback.
+
+---
+
+## 2026-06-01 — Android Bridge Gateway (FASE 6)
+
+**Contexto:** Com as FASES 0-5 estáveis (7/7 serviços verdes), chegou o momento de construir a ponte entre IAs externas e o Android. A FASE 6 adiciona dois novos serviços ao stack: Android Bridge Gateway (4444) e Hub PWA (5555).
+
+**Arquitetura implementada (4 arquivos core):**
+
+1. `bridge_permissions.json` — Sistema de escopos por identidade de IA. Claude tem 8 escopos (maior confiança), Antigravity tem 2, Gemini tem 1. Blacklist absoluta de 8 operações perigosas em hardcode.
+
+2. `bridge_audit.js` — Log imutável em `Logs/android-bridge-audit.log`. Cada operação gera entrada com timestamp UTC, IA, escopo, operação e status. Exporta logAudit(), getAuditLog() e getAuditStats().
+
+3. `bridge_middleware.js` — Middleware Express que implementa 4 camadas em sequência: (1) extrair token, (2) identificar IA por token, (3) verificar escopo, (4) verificar rate limit. Zero trust: toda IA é cliente externo não confiável por padrão.
+
+4. `android_bridge.js` — Servidor Express na porta 4444 (apenas 127.0.0.1). READ: battery, wifi, location, clipboard/get, storage/list. WRITE: notification, clipboard/set, tts, intent/open. Kill switch via X-Owner-Key. Rotas blacklistadas retornam 403 permanente.
+
+**Hub PWA (`Projetos/hub_pwa/`):**
+- `server.js` (porta 5555): serve a PWA + proxy bridge + rota kanban
+- `index.html` + `style.css` + `app.js`: interface dark mobile-first
+- Funcionalidades: status dos 6 serviços, controles da bridge, kanban ao vivo, log de auditoria
+
+**Pré-requisito crítico:** `pkg install termux-api` + app Termux:API da Play Store.
+
+**Variáveis a adicionar ao .env:**
+- BRIDGE_TOKEN_CLAUDE=<gerar token único>
+- BRIDGE_TOKEN_ANTIGRAVITY=<gerar token único>
+- BRIDGE_TOKEN_GEMINI=<gerar token único>
+- BRIDGE_OWNER_KEY=<chave exclusiva Guilherme>
+
+**Stack completo após FASE 6:**
+| Porta | Serviço |
+|---|---|
+| 11434 | llama-server (Qwen) |
+| 3001 | MCP Server |
+| 3333 | workspace_agent |
+| 4000 | API REST |
+| 4001 | Agente Local |
+| 4444 | Android Bridge |
+| 5555 | Hub PWA |
+
+**Princípio de design:** READ antes de WRITE — rotas de leitura devem ser validadas em produção por pelo menos 7 dias antes de habilitar as de escrita em qualquer processo automatizado externo.

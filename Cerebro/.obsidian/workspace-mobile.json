@@ -297,10 +297,13 @@
   },
   "active": "ff498017d3e0330a",
   "lastOpenFiles": [
+    "02_Memoria/Tendencias_Tech_2026-06-01.md",
+    "02_Memoria/relatorio_teste.md",
+    "01_Planejamento/Plano_AndroidBridge_FASE6.md",
+    "Memoria-RAG/Guia_Ativacao_Servicos.md",
     "03_Tarefas/kanban.md",
     "00_Sistema/ferramentas_disponiveis.md",
     "Memoria-RAG/2026-05-31_implementacao_completa.md",
-    "Memoria-RAG/Guia_Ativacao_Servicos.md",
     "Memoria-RAG/2026-05-31_embeddings_pooling_fix.md",
     "Memoria-RAG/2026-05-31_wm_21e4cc30.json",
     "02_Memoria/working_memory_active.json",
@@ -329,9 +332,6 @@
     "01_Planejamento/Milestone3_Integracao_Interface.md",
     "Memoria-RAG/2026-05-30_successo_integracao_wrapper.md",
     "Memoria-RAG/2026-05-30_mitigacao_modelo_memoria_fallback.md",
-    "Memoria-RAG/2026-05-29_milestone2_pipeline_concluido.md",
-    "Memoria-RAG/2026-05-30_gatekeeper_reforco.md",
-    "Memoria-RAG/2026-05-28_chronos_v2.md",
-    "Memoria-RAG/2026-05-29_milestone1_ollama_validado.md"
+    "Memoria-RAG/2026-05-29_milestone2_pipeline_concluido.md"
   ]
 }

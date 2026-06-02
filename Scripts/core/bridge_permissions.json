@@ -1,0 +1,117 @@
+{
+  "_version": "1.1.0",
+  "_ultima_revisao": "2026-06-01",
+  "_revisado_por": "Claude Sonnet 4.6 + Guilherme Moreno",
+  "_nota": "v1.1.0: Adicionado trust_tier. IAs cloud NUNCA acessam dados que saem do dispositivo.",
+
+  "trust_tiers": {
+    "cloud": {
+      "descricao": "IA cujo contexto trafega para servidores externos (Anthropic, Google, etc)",
+      "scopes_proibidos_absolutos": [
+        "read:clipboard",
+        "read:location",
+        "read:sms",
+        "read:contacts",
+        "read:storage"
+      ],
+      "motivo": "Qualquer dado nestes escopos entraria no contexto da IA e sairia do dispositivo para servidores da empresa provedora"
+    },
+    "local": {
+      "descricao": "IA que processa dados inteiramente no dispositivo (sem chamadas externas)",
+      "scopes_proibidos_absolutos": [],
+      "motivo": "Dados nunca saem do hardware — soberania total mantida"
+    }
+  },
+
+  "identities": {
+    "claude": {
+      "token_env": "BRIDGE_TOKEN_CLAUDE",
+      "trust_tier": "cloud",
+      "provedor": "Anthropic (servidores externos)",
+      "description": "IA principal de desenvolvimento — CLOUD. Dados sensíveis BLOQUEADOS.",
+      "scopes": [
+        "read:battery",
+        "read:wifi",
+        "write:notification",
+        "write:tts",
+        "intent:open_app"
+      ],
+      "scopes_removidos_por_seguranca": [
+        "read:clipboard — dados podem ir para servidores Anthropic",
+        "read:location  — coordenadas GPS são PII sensível",
+        "write:clipboard — escrita pode vazar contexto sensível de volta"
+      ],
+      "rate_limit": {
+        "requests_per_minute": 10,
+        "requests_per_day": 100
+      }
+    },
+    "antigravity": {
+      "token_env": "BRIDGE_TOKEN_ANTIGRAVITY",
+      "trust_tier": "local",
+      "provedor": "Local (IDE no próprio dispositivo)",
+      "description": "IDE local — processa tudo no device. Acesso a dados sensíveis permitido com confirmação.",
+      "scopes": [
+        "read:battery",
+        "read:wifi",
+        "read:clipboard",
+        "read:location",
+        "write:clipboard",
+        "write:notification",
+        "write:tts"
+      ],
+      "rate_limit": {
+        "requests_per_minute": 5,
+        "requests_per_day": 50
+      }
+    },
+    "qwen_local": {
+      "token_env": "BRIDGE_TOKEN_QWEN",
+      "trust_tier": "local",
+      "provedor": "Local (llama-server porta 11434 — dados nunca saem do hardware)",
+      "description": "IA soberana local — acesso completo permitido.",
+      "scopes": [
+        "read:battery",
+        "read:wifi",
+        "read:clipboard",
+        "read:location",
+        "write:clipboard",
+        "write:notification",
+        "write:tts",
+        "intent:open_app"
+      ],
+      "rate_limit": {
+        "requests_per_minute": 20,
+        "requests_per_day": 500
+      }
+    },
+    "gemini": {
+      "token_env": "BRIDGE_TOKEN_GEMINI",
+      "trust_tier": "cloud",
+      "provedor": "Google (servidores externos)",
+      "description": "Cloud fallback — CLOUD. Escopo mínimo.",
+      "scopes": [
+        "read:battery"
+      ],
+      "scopes_removidos_por_seguranca": [
+        "read:clipboard — dados podem ir para servidores Google",
+        "read:location  — PII sensível"
+      ],
+      "rate_limit": {
+        "requests_per_minute": 3,
+        "requests_per_day": 30
+      }
+    }
+  },
+
+  "blacklist_absoluta": [
+    "termux-sms-send",
+    "termux-call",
+    "termux-camera-photo",
+    "termux-microphone-record",
+    "termux-contact-list",
+    "am broadcast",
+    "FLAG_GRANT",
+    "/Android/data/"
+  ]
+}
