@@ -50,3 +50,12 @@ Cerebro/.obsidian/appearance.json
 *.zip
 *.tar.gz
 *.7z
+
+# Modelos de IA (arquivos grandes — nunca versionar)
+Models/
+*.gguf
+*.bin
+*.safetensors
+*.ggml
+*.pt
+*.pth
