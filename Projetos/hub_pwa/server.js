@@ -105,7 +105,7 @@ app.get('/proxy/bridge/audit', async (req, res) => {
 app.get('/hub/status', (req, res) => {
   res.json({
     service: 'Hub PWA',
-    version: '1.0.3'',
+    version: '1.0.3',
     status: 'operational',
     timestamp: new Date().toISOString(),
     porta: PORT
