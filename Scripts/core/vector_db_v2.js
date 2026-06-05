@@ -35,8 +35,8 @@ const DIRS_TO_INDEX = [
     'Cerebro/Memoria-RAG',
 ];
 
-const CHUNK_SIZE    = 500;
-const CHUNK_OVERLAP = 100;
+const CHUNK_SIZE    = 180;
+const CHUNK_OVERLAP = 30;
 
 // ============================================================
 // UTILITARIOS
@@ -87,7 +87,7 @@ async function getEmbedding(text) {
     const res = await fetch(`${LLAMA_BASE}/v1/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: EMBED_MODEL, input: text.slice(0, 2000) })
+        body: JSON.stringify({ model: EMBED_MODEL, input: text.slice(0, 200) })
     });
     if (!res.ok) {
         const err = await res.text();

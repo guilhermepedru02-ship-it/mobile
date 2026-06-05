@@ -1,6 +1,6 @@
 # Guia Definitivo de Ativação de Serviços
 *Referência viva do Workspace. Deve ser atualizada a cada novo serviço incorporado ao sistema.*
-*Última atualização: 2026-05-31 — zRAM script + FASE 3 cloud_bridge + silent_execution ativado + stack 6/6 validada ao vivo*
+*Última atualização: 2026-06-03 — Android Bridge (4444) + Hub PWA (5555) + CORS fix + pip3 guidance + SSID fix*
 
 ---
 
@@ -14,8 +14,10 @@
 | 3 | Agente Local (ollama_agent) | 4001 | HTTP/JSON | Pipeline IA offline — Chronos Local (retry 2× + cloud fallback) |
 | 4 | MCP Server | 3001 | SSE/MCP | Núcleo de conexão de IAs externas (Claude, Antigravity, Manus) |
 | 5 | API REST | 4000 | HTTP/JSON | Endpoints de dados com autenticação Bearer Token |
+| 6 | **Android Bridge** | 4444 | HTTP/JSON | Ponte zero-trust entre IAs e hardware Android (battery/wifi/tts/notif) |
+| 7 | **Hub PWA** | 5555 | HTTP/PWA | Painel mobile: status dos 7 serviços + controles bridge + kanban + auditoria |
 | — | Bot Telegram (Chronos v4) | — | Telegram API | Interface remota via chat |
-| — | cloud_bridge (interno) | — | HTTPS | Fallback para Anthropic API quando llama-server falha 2× |
+| — | cloud_bridge (interno) | — | HTTPS | Fallback Gemini 2.0 Flash quando llama-server falha 2× |
 | — | Túnel Serveo | SSH | HTTPS | Acesso externo para IAs da nuvem (opcional) |
 
 ---
@@ -234,6 +236,99 @@ bash Scripts/ngrok/start_tunnel.sh both   # ambos
 
 ---
 
+
+## 6. Android Bridge — Acesso ao Hardware Android
+**Função:** Expoe battery, wifi, localização, clipboard, TTS e notificacoes como API REST autenticada.  
+**Porta:** 4444 (apenas 127.0.0.1) | **Script:** `Scripts/core/android_bridge.js`  
+**Pré-requisito:** `pkg install termux-api` + App Termux:API instalado com permissões concedidas.
+
+```bash
+# Subir (integrado ao ws/03_start_services.sh):
+cd /storage/emulated/0/Workspace/Scripts/core
+nohup node android_bridge.js > /storage/emulated/0/Workspace/Logs/android_bridge.log 2>&1 &
+
+# Validar:
+curl http://127.0.0.1:4444/bridge/status
+# Esperado: {"status":"operational", "service":"Android Bridge", ...}
+
+# Teste de battery (requer token):
+curl -X POST http://127.0.0.1:4444/bridge/battery \
+  -H "Authorization: Bearer $BRIDGE_TOKEN_CLAUDE"
+```
+
+**Escopos por IA (bridge_permissions.json):**
+| IA | Escopos | Limite/h |
+|---|---|---|
+| claude | read:battery, read:wifi, read:location, read:clipboard, read:storage, write:notification, write:clipboard, write:tts | 60 req |
+| antigravity | read:battery, read:wifi | 20 req |
+| gemini | read:battery | 10 req |
+
+**Rotas READ:** `battery`, `wifi`, `location`, `clipboard/get`, `storage/list`  
+**Rotas WRITE:** `notification`, `clipboard/set`, `tts`, `intent/open`  
+**Kill switch:** header `X-Owner-Key: $BRIDGE_OWNER_KEY` para desligar a bridge remotamente.
+
+> ⚠️ Rotas WRITE devem ser usadas com cautela em automações. Principio: READ estável por 7 dias antes de habilitar WRITE em produção.
+
+---
+
+## 7. Hub PWA — Painel de Controle Mobile
+**Função:** Interface web unificada (dark mode, mobile-first) para monitorar e controlar todo o workspace.  
+**Porta:** 5555 | **Diretório:** `Projetos/hub_pwa/` | **Stack:** Express 4 + PWA vanilla JS
+
+```bash
+# Subir (integrado ao ws):
+cd /storage/emulated/0/Workspace/Projetos/hub_pwa
+nohup node server.js > /storage/emulated/0/Workspace/Logs/hub_pwa.log 2>&1 &
+
+# Abrir no browser do dispositivo:
+# http://127.0.0.1:5555
+
+# Validar:
+curl http://127.0.0.1:5555/hub/status
+# Esperado: {"status":"operational", "uptime":...}
+```
+
+**Abas do PWA:**
+| Aba | Função |
+|---|---|
+| Painel | Status battery + wifi + 7 serviços em tempo real |
+| Bridge | Controles manuais (TTS, notificação, clipboard, abrir app) |
+| Kanban | Leitura ao vivo de `Cerebro/03_Tarefas/kanban.md` |
+| Auditoria | Log dos acessos da bridge (requer Owner Key) |
+
+**Arquitetura interna (server.js):**
+- `POST /proxy/bridge/:action` — proxy autenticado para a Bridge (resolve CORS)
+- `GET /hub/services` — health check server-side de todos os 6 servicos
+- `GET /hub/kanban` — leitura do kanban.md
+- `GET /proxy/bridge/audit` — proxy GET para log de auditoria
+
+**app.js v1.0.3 (2026-06-03) — correções aplicadas:**
+- CORS resolvido: todas as chamadas bridge vão via `/proxy/bridge` (mesmo origin)
+- SSID display: exibe nome completo da rede (sem truncagem de 12 chars)
+- `<unknown ssid>`: mostra `rede Wi-Fi` quando Android bloqueia SSID em background — não indica problema de permissão
+
+> ⚠️ O token da bridge e armazenado em `localStorage` do browser. Não expor o Hub PWA em túnel público sem HTTPS.
+
+---
+
+## Python no Termux — pip3 vs pkg
+
+**Regra permanente:** O Termux não tem compilador C completo disponivel para pip. A distincão e:
+
+| Tipo de pacote | Comando correto | Exemplo |
+|---|---|---|
+| Pure Python (sem C) | `pip3 install X` | requests, flask, httpx |
+| C-extensions / nativas | `pkg install python-X` | numpy, pillow, scipy |
+
+**Pacotes já instalados via pkg (2026-06-03):**
+- `python-numpy` (v2.4.4) ✔
+- `python-pillow` (v12.2.0) ✔
+- `python-scipy` (v1.17.1) ✔
+
+> Se `pip3 install X` retornar erro de compilacão (gcc, wheel, build failed) — use `pkg install python-X`.
+
+---
+
 ## Checklist de Saúde Completa
 ```bash
 ws-status
@@ -258,7 +353,9 @@ free -h                                 # RAM e Swap
 | 4      | `node mcp_server.js`             | Sim (IAs externas)              |
 | 5      | `node bot.js`                    | Sim (Telegram)                  |
 | 6      | `node api_rest.js`               | Opcional                        |
-| 7      | `start_tunnel.sh`                | Opcional (IAs da nuvem sem USB) |
+| 7      | `node android_bridge.js`         | Sim (hardware Android)          |
+| 8      | `node hub_pwa/server.js`         | Sim (painel PWA)                |
+| 9      | `start_tunnel.sh`                | Opcional (IAs da nuvem sem USB) |
 
 > **Mínimo para IA local offline:** sessões 1, 2, 3 e 4.
 
@@ -269,4 +366,8 @@ free -h                                 # RAM e Swap
 |---|---|
 | 2026-05-31 | zRAM script (00_zram_setup.sh) + cloud_bridge FASE 3 + silent_execution + stack 6/6 validada ao vivo + reindexação 308 chunks |
 | 2026-05-30 | workspace_agent_server v1.0.0 (porta 3333) + bootstrap integrado + ollama_agent v2.0.0 (retry+fallback) + MiniSearch RAG |
+| 2026-06-03 | Android Bridge (4444) + Hub PWA (5555) + CORS fix + pip3/pkg guide + SSID fix (app.js v1.0.3) |
+| 2026-06-02 | Esta estabilização mestre: 4 bugs corrigidos (regex executor, list_cerebro, index timeout, HUB path). Stack 6/6 → 7/7. |
+| 2026-06-01 | FASE 6 implementada: android_bridge.js + bridge_permissions + bridge_audit + bridge_middleware + Hub PWA criados. |
+| 2026-05-31 | zRAM script (00_zram_setup.sh) + cloud_bridge FASE 3 + silent_execution + stack 6/6 validada ao vivo + reindexacão 308 chunks |
 | 2026-05-29 | Git remoto + DevTools v2.2 + API REST + llama-server migração |

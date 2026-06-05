@@ -128,3 +128,45 @@ Qualquer IA externa (Claude, Antigravity, Manus) usa o mesmo endpoint.
 | 5555 | Hub PWA |
 
 **Princípio de design:** READ antes de WRITE — rotas de leitura devem ser validadas em produção por pelo menos 7 dias antes de habilitar as de escrita em qualquer processo automatizado externo.
+
+---
+
+## 2026-06-01 — Android Bridge: Escopos de Segurança por Identidade de IA
+
+**Contexto:** Com a FASE 6 (Android Bridge), foi necessário definir uma política de acesso ao hardware por IA.
+
+**Decisão:** Sistema de escopos escalonado em `bridge_permissions.json` v1.1.0:
+- **Claude (confiada, externa):** 8 escopos — read:battery, read:wifi, read:location, read:clipboard, read:storage, write:notification, write:clipboard, write:tts. Rate: 60 req/h.
+- **Antigravity (local):** 2 escopos — read:battery, read:wifi. Rate: 20 req/h.
+- **Gemini (cloud, menos confiada):** 1 escopo — read:battery. Rate: 10 req/h.
+- **Blacklist absoluta (hardcode, sem exceções):** sms, camera, microphone, contacts, call, record_audio, delete_file, factory_reset.
+
+**Princípio:** Zero trust — toda IA é cliente não confiável por padrão. Autenticação em 4 camadas: token → identidade → escopo → rate limit. Falha em qualquer camada = bloqueio + audit log.
+
+**Nota de segurança:** `read:clipboard` e `read:storage` removidos de IAs cloud (Claude, Gemini) na revisão v1.1.0 — dados do clipboard transitando para servidores externos foram identificados como vulnerabilidade arquitetural real. IAs locais (Qwen, Antigravity) mantêm esses escopos pois os dados ficam no dispositivo.
+
+---
+
+## 2026-06-02 — Hub PWA: Proxy Server-Side para Resolver CORS
+
+**Contexto:** A arquitetura original do Hub PWA (`app.js`) chamava a Android Bridge (porta 4444) diretamente do browser. Isso causava erros CORS porque o browser bloqueia requisições cross-origin mesmo em localhost quando as portas diferem.
+
+**Decisão:** O `server.js` (porta 5555) passou a funcionar como proxy reverso para a bridge:
+- `POST /proxy/bridge/:action` → encaminha para `http://127.0.0.1:4444/bridge/:action` com token do `.env`
+- `GET /proxy/bridge/audit` → encaminha para `/bridge/audit` com header `x-owner-key`
+- `GET /hub/services` → health check server-side dos 7 serviços (evita CORS em cada porta)
+
+**Impacto:** `app.js` agora faz todas as chamadas para o mesmo origin (5555 → 5555), sem dependência de CORS. O token da bridge nunca fica exposto no código cliente — o proxy o injeta server-side via `process.env.BRIDGE_TOKEN_CLAUDE`.
+
+---
+
+## 2026-06-03 — Python no Termux: pip3 vs pkg install
+
+**Contexto:** Relatório anterior documentava `pip3 install` como "quebrado" genericamente. Após diagnóstico, a realidade é mais precisa.
+
+**Decisão / regra permanente:**
+- `pip3 install` funciona normalmente para pacotes pure Python (requests, flask, httpx, etc.).
+- Pacotes com extensões C/Fortran (numpy, pillow, scipy) **não compilam via pip** no Termux — usar `pkg install python-<nome>`.
+- Não é um bug a ser corrigido; é uma limitação estrutural do ambiente Termux sem toolchain completo.
+
+**Estado (2026-06-03):** python-numpy 2.4.4, python-pillow 12.2.0, python-scipy 1.17.1 instalados e funcionais via pkg.

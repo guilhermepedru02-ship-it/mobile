@@ -73,8 +73,23 @@ app.post('/bridge/battery', bridgeAuth('read:battery'), async (req, res) => {
  */
 app.post('/bridge/wifi', bridgeAuth('read:wifi'), async (req, res) => {
   const ia = req.bridgeIdentity.name;
+  const CACHE_FILE = '/sdcard/Workspace/Logs/wifi_ssid_cache.json';
   try {
     const data = await runTermuxCommand('termux-wifi-connectioninfo');
+    // Android 10+ bloqueia SSID em background (bssid=02:00:00:00:00:00, network_id=-1)
+    const isBlocked = !data.ssid || data.ssid === '<unknown ssid>';
+    if (!isBlocked) {
+      // Salva cache com SSID valido
+      const { writeFileSync } = await import('fs');
+      writeFileSync(CACHE_FILE, JSON.stringify({ ssid: data.ssid, ts: Date.now() }));
+    } else {
+      // Tenta usar cache
+      try {
+        const { readFileSync } = await import('fs');
+        const cached = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
+        if (cached.ssid) { data.ssid = cached.ssid; data.ssid_cached = true; }
+      } catch (_) { /* sem cache ainda */ }
+    }
     logAudit({ ia, scope: 'read:wifi', operation: 'termux-wifi-connectioninfo', status: 'OK' });
     res.json({ success: true, data });
   } catch (err) {

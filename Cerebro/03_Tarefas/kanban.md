@@ -1,85 +1,81 @@
 # Kanban do Workspace Mobile
 
-> Atualizado em 02/06/2026 · Claude Sonnet 4.6 via MCP · Diagnóstico Massivo + Indexação Vetorial v1.1 + Hub PWA restaurado
+> Atualizado em 05/06/2026 · Claude Sonnet 4.6 via MCP · Diagnóstico Massivo v2 — Stack 7/7 ✅
 
 ---
 
 ## 🎯 Objetivos Atuais
 
-- **IMEDIATO:** `git push origin main` no Termux (commits acumulados há várias sessões)
-- **IMEDIATO:** Aguardar conclusão da indexação vetorial em background (index_cerebro.py v1.1)
-- **PRÓXIMO:** Testar `/local o que é RAG?` → deve responder via Gemini (cloud-first)
-- **PRÓXIMO:** Validar busca semântica com `.vector_cache_v2.json` após indexação
-- `node Scripts/core/consolidate_rag.js` ao fim de cada dia (já feito hoje)
+- **IMEDIATO:** `git push origin main` no Termux (15 arquivos modificados, 2 untracked principais)
+- **IMEDIATO:** Re-indexar RAG — 3 arquivos novos desde cache_v2 (Guia_Ativacao, estabilizacao_mestre, resumo_06-03)
+- **PRÓXIMO:** Resolver Gemini quota HTTP 429 — KNOWLEDGE_QUERY/CREATIVE_TASK retornam "Sem dados"
+- **PRÓXIMO:** Configurar TTS engine no Android (termux-tts-speak falhando silenciosamente)
 
 ---
 
 ## 📋 Backlog
 
-### 🔌 FASE 6 — Validação e Evolução
-- [ ] **6.1.2 — Testes ao vivo com Claude via MCP** · Chamar `/bridge/battery` e `/bridge/wifi` via MCP
-- [ ] **6.1.3 — Validar auditoria** · Verificar `Logs/android-bridge-audit.log` após testes
-- [ ] **6.1.4 — Validação semana 1** · Manter READ ativo por 7 dias antes de habilitar WRITE automático
+### 🔧 Infraestrutura
+- [ ] **Cron para consolidação RAG** · `0 23 * * * node .../consolidate_rag.js`
+- [ ] **Cron para re-indexação vetorial** · semanal após consolidação
+- [ ] **Escopo `read:storage` dedicado** · `bridge_permissions.json` v1.2
+- [ ] **Filtro temporal no RAG** · memórias recentes com peso maior
+- [ ] **hub_pwa versao** · sincronizar server.js version com app.js (ambos em v1.0.3)
+- [ ] **hub_pwa /hub/services** · adicionar svc-hub (5555) ao health check próprio
+- [ ] **MCP: registrar android_bridge como tool** · expor /bridge/* como MCP tool diretamente
 
-### 🧠 Arquitetura — Refinamentos Futuros
-- [ ] **Consolidação RAG automática via cron** · `0 23 * * * node .../consolidate_rag.js`
-- [ ] **Filtro de data e decaimento temporal no RAG** · Memórias recentes com peso maior
-- [ ] **Remover pasta `Workspace/` fantasma** · `rm -rf /storage/emulated/0/Workspace/Workspace/`
-- [ ] **Escopo `read:storage` dedicado** · `bridge_permissions.json` v1.1
-- [ ] **hub_pwa node_modules** · Criar package.json próprio ou mover para Scripts/core/
+### 🤖 Agente Local
+- [ ] **Gemini quota** · Verificar reset diário ou upgrade de plano. KNOWLEDGE_QUERY/CREATIVE_TASK não funcionam sem Gemini
+- [ ] **Fallback local para KNOWLEDGE_QUERY** · quando cloud falha, usar Qwen + RAG em vez de "Sem dados"
+- [ ] **TTS** · `termux-tts-speak` falha silenciosamente — verificar engine TTS no Android (Configurações > Acessibilidade > TTS)
+
+### 👎 App Nativo (Plano Mestre)
+- [ ] **Fase 1** · Interface nativa Android substituindo bot Telegram
+- [ ] **Fase 2** · SQLite persistence + histórico de conversações
 
 ---
 
 ## 🔨 Em Progresso
 
-- [ ] **git push origin main** · Necessário no Termux (rede externa bloqueada no MCP)
-- [ ] **Indexação vetorial .vector_cache_v2.json** · Rodando em background (PID 10437)
-- [ ] **Validar Termux:API F-droid** · Confirmar termux-battery/wifi via bridge após migração
+- [ ] **git push origin main** · Necessário no Termux (rede externa bloqueada via MCP)
+- [ ] **Re-indexação RAG** · 3 arquivos novos aguardando: Guia_Ativacao_Servicos.md, 2026-06-02_estabilizacao_mestre.md, 2026-06-03_resumo.md
 
 ---
 
 ## ✅ Concluído
 
-### 02/06/2026 — Diagnóstico Massivo + Indexação Vetorial (Claude Sonnet 4.6)
-- [x] **Diagnóstico visual completo** · Saúde RAM/Swap/Disk/Load + inventário de serviços e memória. (Claude, 02/06/2026)
-- [x] **Eliminados 2 processos zombie** · test_embeddings.mjs PIDs 2770/3288 → liberados ~200MB RAM. (Claude, 02/06/2026)
-- [x] **index_cerebro.py v1.1 corrigido** · Bug crítico: 00_Sistema e 01_Planejamento removidos da indexação (violavam RAG blacklist). 53 arquivos válidos identificados. (Claude, 02/06/2026)
-- [x] **Indexação vetorial iniciada** · 53 arquivos × ~500 chunks estimados. Roda em background via nohup. (Claude, 02/06/2026)
-- [x] **RAG consolidado** · 5 wm_*.json de 02/06 → 2026-06-02_consolidated.md. (Claude, 02/06/2026)
-- [x] **hub_pwa restaurado** · node_modules copiados, servidor rodando em :5555. (Claude, 02/06/2026)
-- [x] **Stack verificado** · 8 serviços operacionais pós-limpeza de zombies. (Claude, 02/06/2026)
+### 05/06/2026 — Diagnóstico Massivo v2 (Claude Sonnet 4.6)
+- [x] **Stack 7/7 validado** · llama-server, MCP, workspace_agent, API REST, agente local, bridge, hub_pwa — todos ONLINE. (Claude, 05/06/2026)
+- [x] **Intent routing 8/8** · todos os TOOL_CALL intents roteando `tool_direct` corretamente. (Claude, 05/06/2026)
+- [x] **Bridge READ validada** · battery (75%, CHARGING, 28°C) + wifi (Família Moreno, 351Mbps) funcionando. (Claude, 05/06/2026)
+- [x] **RAG cache_v2** · 994 chunks indexados, 20MB, criado 02/06. cache_v1: 334 docs MiniSearch. (Claude, 05/06/2026)
+- [x] **Limpeza scripts temporários** · 7 arquivos de debug removidos de Scripts/core. (Claude, 05/06/2026)
+- [x] **Pasta Workspace/ fantasma removida** · /sdcard/Workspace/Workspace/ deletada. (Claude, 05/06/2026)
+- [x] **4 documentos RAG atualizados** · Guia_Ativacao_Servicos, erros_conhecidos, decisoes_tecnicas, resumo 06-03. (Claude, 05/06/2026)
 
-### 01/06/2026 — Fix Gatekeeper + Cloud-First (Claude Sonnet 4.6)
-- [x] **`ollama_agent.js` v2.2.0** · ensureGatekeeperUnlocked() auto-refresh 28min. (Claude, 01/06/2026)
-- [x] **Cloud-First KNOWLEDGE/CREATIVE** · Gemini direto, Qwen apenas ferramentas. (Claude, 01/06/2026)
+### 03/06/2026 — SSID Fix + pip3 + Documentação (Claude Sonnet 4.6)
+- [x] **hub_pwa app.js v1.0.3** · Fix SSID `<unknown ssid>` + remove truncagem + CORS proxy. (Claude, 03/06/2026)
+- [x] **python-numpy 2.4.4** · pkg install. (Claude, 03/06/2026)
+- [x] **python-pillow 12.2.0** · pkg install. (Claude, 03/06/2026)
 
-### 01/06/2026 — FASE 6: Android Bridge Gateway
-- [x] **`bridge_permissions.json` v1.0.0** (Claude, 01/06/2026)
-- [x] **`bridge_audit.js` v1.0.0** (Claude, 01/06/2026)
-- [x] **`bridge_middleware.js` v1.0.0** (Claude, 01/06/2026)
-- [x] **`android_bridge.js` v1.0.0** · Porta 4444. (Claude, 01/06/2026)
-- [x] **`Projetos/hub_pwa/`** · server.js (5555) + PWA completo. (Claude, 01/06/2026)
-- [x] **Bridge validada ao vivo** · battery ✔️ | wifi ✔️ | clipboard DENIED ✔️. (Guilherme, 01/06/2026)
-- [x] **Bootstrap v3.0** · 8 serviços. (Claude, 01/06/2026)
+### 02/06/2026 — Estabilização Mestre (Claude Sonnet 4.6)
+- [x] **Bug #1** · executor.js regex fork-bomb falso positivo corrigido. (Claude, 02/06/2026)
+- [x] **Bug #4** · 03_start_services.sh path HUB corrigido. (Claude, 02/06/2026)
+- [x] **index_cerebro.py** · timeout 45s + retry 3x. (Claude, 02/06/2026)
+- [x] **Stack 6/6 → 7/7** · hub_pwa restaurado. (Claude, 02/06/2026)
 
-### 01/06/2026 — Diagnóstico Massivo + Refinamentos
-- [x] **7/7 serviços verdes** (Claude, 01/06/2026)
-- [x] **dispatch.js v2.1.0** (Claude, 01/06/2026)
-- [x] **context_builder.js v2.2.0** (Claude, 01/06/2026)
-- [x] **ollama_agent.js v2.1.0** (Claude, 01/06/2026)
-- [x] **consolidate_rag.js** · 129 wm_*.json consolidados. (Claude, 01/06/2026)
-- [x] **Bot Telegram** · Migrado Anthropic → Gemini. (Claude, 01/06/2026)
+### 01/06/2026 — FASE 6 + Gatekeeper Fix
+- [x] **android_bridge.js** · porta 4444 + zero-trust + audit. (Claude, 01/06/2026)
+- [x] **Hub PWA** · server.js (5555) + PWA completo. (Claude, 01/06/2026)
+- [x] **ollama_agent.js v2.2.0** · gatekeeper auto-refresh 28min. (Claude, 01/06/2026)
+- [x] **Cloud-First KNOWLEDGE/CREATIVE** · Gemini direto. (Claude, 01/06/2026)
 
-### 31/05/2026 — Vector DB v2 + Embeddings
-- [x] **vector_db_v2.js** (Claude, 31/05/2026)
-- [x] **start_llama_server.sh v2.1** · ubatch=512. (Claude, 31/05/2026)
-
-### FASES 0-5 — Fundação Completa
-- [x] Remover Ollama, validar llama-server + Qwen 0.5B Q4_K_M
+### FASES 0–5 — Fundação Completa
+- [x] llama-server + Qwen 0.5B Q4_K_M — migrado de Ollama
 - [x] workspace_agent_server.js (3333)
 - [x] working_memory.js + pipeline completo
 - [x] cloud_bridge.js + Gemini fallback
 - [x] Git remoto GitHub + DevTools v2.2
 - [x] API REST (4000) + Bearer Token
-- [x] Bot Telegram completo
-- [x] Milestones 0, 1, 2, 3 e 4 COMPLETOS
+- [x] Bot Telegram Chronos v4
+- [x] vector_db_v2.js + embeddings

@@ -1,7 +1,7 @@
 {
-  "version": "2.7.1",
-  "description": "Catalogo de ferramentas do Chronos Local v2.7.1 — identity_check JSON fix: aspas duplas escapadas",
-  "updated_at": "2026-05-31",
+  "version": "2.7.2",
+  "description": "Catalogo de ferramentas do Chronos Local v2.7.2 — add list_cerebro (listar arquivos do Cerebro por diretorio)",
+  "updated_at": "2026-06-02",
   "mcp_servers": [
     {
       "name": "workspace_agent",
@@ -155,6 +155,36 @@
       "type": "read_file",
       "path": "Cerebro/03_Tarefas/kanban.md",
       "output": "markdown"
+    },
+    {
+      "id": "list_cerebro",
+      "description": "Lista a estrutura completa do Cerebro: arquivos .md por diretorio com tamanhos e contagens. Tambem mostra status dos caches vetoriais.",
+      "trigger_keywords": [
+        "listar cerebro",
+        "lista cerebro",
+        "ls cerebro",
+        "arquivos do cerebro",
+        "arquivos cerebro",
+        "listar arquivos",
+        "lista arquivos",
+        "mostrar arquivos",
+        "mostra arquivos",
+        "estrutura cerebro",
+        "estrutura do cerebro",
+        "o que tem no cerebro",
+        "conteudo cerebro",
+        "conteudo do cerebro",
+        "ver cerebro",
+        "explorar cerebro",
+        "pastas cerebro",
+        "diretorios cerebro",
+        "listar memoria",
+        "listar diario",
+        "listar rag"
+      ],
+      "type": "run_command",
+      "command": "find /storage/emulated/0/Workspace/Cerebro -name '*.md' -type f | sort | python3 -c \"\nimport sys, os\nprev_dir = None\nfor line in sys.stdin:\n    f = line.strip()\n    d = os.path.basename(os.path.dirname(f))\n    if d != prev_dir:\n        print()\n        print(f'[{d}]:')\n        prev_dir = d\n    size = os.path.getsize(f) // 1024\n    print(f'  {os.path.basename(f)} ({size}KB)')\n\" && echo '' && ls -lh /storage/emulated/0/Workspace/Cerebro/.vector_cache*.json 2>/dev/null",
+      "output": "text"
     },
     {
       "id": "git_status",

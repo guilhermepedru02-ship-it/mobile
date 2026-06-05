@@ -13,7 +13,7 @@ CORE="/storage/emulated/0/Workspace/Scripts/core"
 LOGS="/storage/emulated/0/Workspace/Logs"
 MODEL="/storage/emulated/0/Workspace/Models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
 BOT="/storage/emulated/0/Workspace/Projetos/telegram_bot"
-HUB="/data/data/com.termux/files/home/hub_pwa"
+HUB="/storage/emulated/0/Workspace/Projetos/hub_pwa"
 
 mkdir -p "$LOGS"
 

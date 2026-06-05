@@ -27,7 +27,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
 const BLACKLISTED_COMMANDS = [
     /rm\s+-rf\s+\/$/,           // Destruição da raiz
     /chmod\s+.*777/,            // Permissões perigosas
-    /:.*\(.*\).*\{.*/,          // Fork bombs
+    /:.*\(\s*\)\s*\{/,         // Fork bombs (precisao melhorada: evita falso positivo com loops)
     /\bdd\b.*\bif=/,            // Escrita raw em disco
     /\bmkfs\b/,                 // Formatação de partições
     /\breboot\b/,               // Reboot do sistema

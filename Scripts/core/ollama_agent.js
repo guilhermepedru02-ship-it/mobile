@@ -234,7 +234,7 @@ export async function runAgent(userPrompt) {
             completeStep(`tool_exec:${tool.id}`, `FAILED: ${errMsg}`);
 
             const DIRECT_OUTPUT_TOOLS = [
-                'identity_check', 'list_tools', 'ram_status', 'disk_usage', 'git_status', 'git_log',
+                'identity_check', 'list_tools', 'list_cerebro', 'ram_status', 'disk_usage', 'git_status', 'git_log',
                 'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
                 'cloud_usage', 'kanban_read', 'diary_today'
             ];
@@ -263,7 +263,7 @@ export async function runAgent(userPrompt) {
 
     // 4. DIRECT OUTPUT BYPASS — ferramentas determinísticas
     const DIRECT_OUTPUT_TOOLS = [
-        'identity_check', 'list_tools', 'ram_status', 'disk_usage', 'git_status', 'git_log',
+        'identity_check', 'list_tools', 'list_cerebro', 'ram_status', 'disk_usage', 'git_status', 'git_log',
         'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
         'cloud_usage', 'kanban_read', 'diary_today'
     ];
