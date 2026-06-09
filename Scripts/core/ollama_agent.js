@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { dispatch, INTENT } from './dispatch.js';
-import { buildContext } from './context_builder.js';
+import { buildContext, buildRAGContext } from './context_builder.js';
 import { startTask, completeStep, finishTask, readTask } from './working_memory.js';
 import { processAgentAction } from './executor.js';
 import { consultExpertIA } from './cloud_bridge.js';
@@ -206,7 +206,9 @@ export async function runAgent(userPrompt) {
     if (CLOUD_FIRST_INTENTS.includes(intent) && !tool) {
         log(`CLOUD_FIRST: ${intent} → delegando direto para cloud (Qwen não usa)`);
         completeStep('cloud_first', intent);
-        const cloudResult = await consultExpertIA(userPrompt);
+        const ragContext = await buildRAGContext(userPrompt);
+        const cloudContext = ragContext ? `[Memória RAG Local]\n${ragContext}` : '';
+        const cloudResult = await consultExpertIA(userPrompt, cloudContext);
         if (cloudResult.ok) {
             const resp = cloudResult.response;
             log(`CLOUD_FIRST OK (${cloudResult.backend}): ${resp.slice(0, 80)}`);
@@ -313,7 +315,11 @@ export async function runAgent(userPrompt) {
 
         if (fallbackEnabled && canDelegate) {
             log('LOCAL FALHOU — cloud fallback');
-            const contextForCloud = toolOutput ? `Ferramenta "${tool?.id}":\n${toolOutput.slice(0, 400)}` : '';
+            let contextForCloud = toolOutput ? `Ferramenta "${tool?.id}":\n${toolOutput.slice(0, 400)}` : '';
+            if (!toolOutput) {
+                const ragContext = await buildRAGContext(userPrompt);
+                contextForCloud = ragContext ? `[Memória RAG Local]\n${ragContext}` : '';
+            }
             const cloudResult = await consultExpertIA(userPrompt, contextForCloud);
             if (cloudResult.ok) {
                 response = cloudResult.response;

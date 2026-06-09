@@ -28,7 +28,7 @@ const EMBED_DIM      = 896; // n_embd do Qwen 0.5B
 
 const DIRS_TO_INDEX = [
     'Cerebro/00_Sistema',
-    'Cerebro/01_Planos',
+    'Cerebro/01_Planejamento',
     'Cerebro/02_Memoria',
     'Cerebro/03_Tarefas',
     'Cerebro/04_Diario',

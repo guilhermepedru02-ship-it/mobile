@@ -1,65 +1,29 @@
-# Catálogo de Ferramentas do Executor
+# Ferramentas Disponíveis no Chronos Local
 
-> A ferramenta unificada é chamada via `execute_workspace_action` através do servidor MCP `workspace-executor`. A IA deve enviar o comando usando um array de ações dentro de um payload JSON. Caminhos de arquivos devem ser relativos à raiz do Workspace (ex: `Cerebro/...`).
+> **Nota de Governança:** Este documento é um reflexo do `Scripts/core/tool_registry.json` (v2.7.2). Qualquer IA externa ou local que precisar entender as capacidades do sistema deve referenciar estas ferramentas.
 
-## create_file
-**Descrição:** Cria um arquivo novo ou sobrescreve um existente.
-```json
-{ "type": "create_file", "path": "Cerebro/exemplo.md", "content": "# Título" }
-```
+## Ferramentas do Agente Local (Qwen 0.5B)
+| ID da Ferramenta | Descrição |
+|---|---|
+| `identity_check` | Apresenta a identidade completa do Chronos Local: nome, hardware, modelo, saúde atual, autonomia e missão. |
+| `consult_expert_ia` | Delega uma tarefa ou pergunta complexa para uma IA externa (via Cloud Bridge). |
+| `cloud_usage` | Verifica o uso de chamadas cloud hoje e o limite diário configurado. |
+| `self_health_check` | Auto-diagnóstico completo: RAM, CPU, uptime, status do llama-server e do agente. |
+| `tech_news` | Busca as últimas notícias de tecnologia em PT/BR via RSS. |
+| `kanban_read` | Lê o Kanban de tarefas atual do Workspace. |
+| `list_cerebro` | Lista a estrutura completa do Cérebro (arquivos .md) com tamanhos e status dos caches vetoriais. |
+| `git_status` | Mostra o status atual do repositório Git local. |
+| `git_log` | Exibe os últimos 10 commits do repositório local. |
+| `disk_usage` | Verifica o uso de armazenamento do dispositivo. |
+| `ram_status` | Verifica o uso atual de RAM e Swap do dispositivo. |
+| `llm_status` | Verifica se o llama-server está rodando e mostra o modelo ativo. |
+| `list_tools` | Lista todas as ferramentas disponíveis para o agente local (este mesmo catálogo). |
+| `diary_today` | Lê a nota do diário do dia atual. |
+| `services_health` | Verifica a saúde de todos os serviços do Workspace (portas ativas, processos). |
+| `memory_write` | Registra um aprendizado ou decisão na Memória-RAG. |
+| `workspace_agent_status` | Verifica se o workspace_agent_server (porta 3333) está rodando. |
 
-## read_file
-**Descrição:** Lê o conteúdo completo de um arquivo.
-```json
-{ "type": "read_file", "path": "Cerebro/exemplo.md" }
-```
-
-## append_file
-**Descrição:** Adiciona conteúdo ao final de um arquivo existente sem apagar o que já estava nele.
-```json
-{ "type": "append_file", "path": "Cerebro/04_Diario/2026-05-27.md", "content": "\n- Nova entrada" }
-```
-
-## list_dir
-**Descrição:** Lista todos os arquivos e subpastas de um diretório.
-```json
-{ "type": "list_dir", "path": "Cerebro/" }
-```
-
-## delete_file
-**Descrição:** Remove um arquivo específico. Esta operação não deleta pastas (apenas arquivos individuais) como medida de segurança.
-```json
-{ "type": "delete_file", "path": "Cerebro/lixo.txt" }
-```
-
-## move_file
-**Descrição:** Move ou renomeia um arquivo ou diretório de um local para outro.
-```json
-{ "type": "move_file", "source": "Cerebro/rascunho.md", "destination": "Cerebro/02_Memoria/final.md" }
-```
-
-## file_info
-**Descrição:** Retorna metadados de um arquivo, como tamanho (bytes) e datas de criação/modificação.
-```json
-{ "type": "file_info", "path": "Cerebro/00_Sistema/README.md" }
-```
-
-## search_files
-**Descrição:** Faz uma busca por uma string de texto dentro de todos os arquivos do diretório especificado.
-```json
-{ "type": "search_files", "path": "Cerebro/", "query": "IA", "recursive": true }
-```
-
-## run_command
-**Descrição:** Executa um comando shell no Termux. Timeout máximo de 60 segundos por operação.
-```json
-{ "type": "run_command", "command": "npm run build" }
-```
-
-# busca vetorial local
-
-- `index_cerebro`: Uma função autônoma que engatilha a reindexação global das anotações em disco.
-- `semantic_search`: Recebe um parâmetro `query` (ex: "preferências de segurança") e retorna as 5 passagens de texto mais relevantes em questão de milissegundos
-
-
-> ⚠️ **Segurança Anti-Destruição:** Comandos como `rm -rf /`, modificações de permissão (chmod 777), shutdown ou acessos a caminhos fora do Workspace (Path Traversal) são instantaneamente bloqueados pelo backend de execução. Todas as falhas de permissão geram auditoria.
+## Busca Vetorial (IAs Externas via MCP `workspace-executor`)
+Além das ferramentas base (read_file, write_file, shell_exec, etc.), há as operações nativas:
+- `index_cerebro`: Engatilha a reindexação global das anotações em disco (RAG vetorial e BM25).
+- `semantic_search`: Recebe `query` e busca passagens de texto relevantes no cache vetorial.

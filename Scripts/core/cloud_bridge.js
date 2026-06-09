@@ -2,14 +2,14 @@
  * cloud_bridge.js — FASE 3: Ponte para IAs em Nuvem
  * Implementa consult_expert_ia para a Arquitetura do Enxame
  *
- * Versão: 1.0.0 · 2026-05-30 · Claude Sonnet 4.6
+ * Versão: 1.1.0 · 2026-06-08 · Antigravity
  *
  * Quando usar:
  *   O agente local (ollama_agent.js) tentou 2× sem sucesso → delega aqui.
  *   Aqui fazemos a chamada HTTP para a IA externa configurada em agent_rules.json.
  *
  * Configuração:
- *   Definir ANTHROPIC_API_KEY no .env do Workspace antes de usar.
+ *   Definir NVIDIA_API_KEY no .env do Workspace antes de usar.
  */
 
 import fs from 'fs';
@@ -85,100 +85,51 @@ export function getUsageSummary() {
 }
 
 // ============================================================
-// CHAMADA ANTHROPIC
-// ============================================================
-
-async function callAnthropic(backend, prompt) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY não configurada. Defina no .env do Workspace.');
-
-    const res = await fetch(backend.endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-            model: backend.model,
-            max_tokens: backend.max_tokens ?? 1000,
-            messages: [{ role: 'user', content: prompt }]
-        })
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Anthropic HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    return {
-        text: data.content?.[0]?.text ?? '',
-        tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0)
-    };
-}
-
-
-// ============================================================
-// CHAMADA GEMINI (Google AI Studio)
-// ============================================================
-
-async function callGemini(backend, prompt) {
-    const apiKey = process.env[backend.api_key_env ?? 'GEMINI_API_KEY'];
-    if (!apiKey) throw new Error(`${backend.api_key_env ?? 'GEMINI_API_KEY'} nao configurada no .env.`);
-
-    const model = backend.model ?? 'gemini-2.0-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: backend.max_tokens ?? 1000 }
-        })
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const tokens = (data.usageMetadata?.promptTokenCount ?? 0) + (data.usageMetadata?.candidatesTokenCount ?? 0);
-    return { text, tokens };
-}
-
-// ============================================================
-// CHAMADA OPENAI-COMPAT GENÉRICA (Antigravity, Manus, etc.)
+// CHAMADA OPENAI-COMPAT GENÉRICA (NVIDIA NIM)
 // ============================================================
 
 async function callOpenAICompat(backend, prompt) {
-    const apiKey  = process.env[backend.api_key_env ?? 'OPENAI_API_KEY'] ?? '';
+    const apiKey  = process.env[backend.api_key_env ?? 'NVIDIA_API_KEY'] ?? '';
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
-    const res = await fetch(backend.endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-            model: backend.model,
-            max_tokens: backend.max_tokens ?? 1000,
-            messages: [{ role: 'user', content: prompt }]
-        })
-    });
+    // Timeout configuravel por backend (padrao 90s para cold start de modelos grandes)
+    const timeoutMs = backend.timeout_ms ?? 90000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Backend "${backend.name}" HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    try {
+        const res = await fetch(backend.endpoint, {
+            method: 'POST',
+            headers,
+            signal: controller.signal,
+            body: JSON.stringify({
+                model: backend.model,
+                max_tokens: backend.max_tokens ?? 1000,
+                temperature: backend.temperature ?? 0.6,
+                top_p: backend.top_p ?? 0.95,
+                messages: [{ role: 'user', content: prompt }]
+            })
+        });
+        clearTimeout(timer);
+
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Backend "${backend.name}" HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = await res.json();
+        return {
+            text: data.choices?.[0]?.message?.content ?? '',
+            tokens: data.usage?.total_tokens ?? 0
+        };
+    } catch (err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error(`Backend "${backend.name}" timeout apos ${timeoutMs}ms (modelo: ${backend.model})`);
+        }
+        throw err;
     }
-
-    const data = await res.json();
-    return {
-        text: data.choices?.[0]?.message?.content ?? '',
-        tokens: data.usage?.total_tokens ?? 0
-    };
 }
 
 // ============================================================
@@ -226,14 +177,7 @@ export async function consultExpertIA(prompt, context = '') {
     log('INFO', `Delegando para: ${backend.name} | modelo: ${backend.model} | prompt: ${prompt.slice(0, 80)}...`);
 
     try {
-        let result;
-        if (backend.name === 'anthropic') {
-            result = await callAnthropic(backend, fullPrompt);
-        } else if (backend.name === 'gemini') {
-            result = await callGemini(backend, fullPrompt);
-        } else {
-            result = await callOpenAICompat(backend, fullPrompt);
-        }
+        const result = await callOpenAICompat(backend, fullPrompt);
 
         // Registra uso
         const usage = loadUsage();

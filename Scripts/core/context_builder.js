@@ -157,7 +157,7 @@ function loadWorkingMemory() {
 }
 
 // RAG CONTEXT BUILDER
-async function buildRAGContext(userPrompt) {
+export async function buildRAGContext(userPrompt) {
     const semantic = await semanticSearch(userPrompt, 2);
     if (semantic && semantic.length > 0) {
         return semantic

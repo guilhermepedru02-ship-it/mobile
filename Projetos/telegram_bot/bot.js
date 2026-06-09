@@ -11,7 +11,7 @@ dotenv.config();
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const allowedChatId = parseInt(process.env.ALLOWED_CHAT_ID, 10);
-const geminiKey = process.env.GEMINI_API_KEY || null;
+const nvidiaKey = process.env.NVIDIA_API_KEY || null;
 
 if (!token || !allowedChatId) {
   console.error('ERRO CRÍTICO: TELEGRAM_BOT_TOKEN ou ALLOWED_CHAT_ID não definidos no .env');
@@ -53,97 +53,54 @@ function checkPort(port) {
   });
 }
 
+
 // ============================================================
-// IA EXTERNA — Gemini (Google AI Studio)
-// MIGRADO: Anthropic → Gemini em 2026-05-31
-// GEMINI_API_KEY instalada e verificada no .env
-// Erro atual: quota do plano gratuito (reset à meia-noite)
+// IA EXTERNA — NVIDIA NIM (Llama 3.1 8B)
+// MIGRADO: NVIDIA -> NVIDIA em 2026-06-08
 // ============================================================
 
-async function askGemini(question) {
-  if (!geminiKey) throw new Error('GEMINI_API_KEY não configurada no .env.');
-
-  const model = 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+async function askNvidia(question) {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error("NVIDIA_API_KEY nao configurada no .env.");
 
   const body = JSON.stringify({
-    contents: [{ parts: [{ text: question }] }],
-    generationConfig: { maxOutputTokens: 1024 }
+    model: "meta/llama-3.1-8b-instruct",
+    messages: [{ role: "user", content: question }],
+    max_tokens: 4096,
+    temperature: 0.6,
+    top_p: 0.95
   });
 
   return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
     const options = {
-      hostname: urlObj.hostname,
-      path: urlObj.pathname + urlObj.search,
-      method: 'POST',
+      hostname: "integrate.api.nvidia.com",
+      path: "/v1/chat/completions",
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey,
+        "Content-Length": Buffer.byteLength(body)
       }
     };
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
         try {
           const parsed = JSON.parse(data);
-          // Detecta erro de quota explicitamente
-          if (parsed.error) {
-            const code = parsed.error.code;
-            const msg = parsed.error.message || 'Erro desconhecido';
-            if (code === 429 || msg.toLowerCase().includes('quota')) {
-              reject(new Error('Quota do Gemini atingida (plano gratuito). Reset à meia-noite.'));
-            } else {
-              reject(new Error(`Gemini API erro ${code}: ${msg}`));
-            }
-            return;
-          }
-          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (parsed.error) { reject(new Error("NVIDIA API erro: " + parsed.error.message)); return; }
+          const text = parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content;
           if (text) resolve(text);
-          else reject(new Error('Resposta inesperada do Gemini: ' + data.slice(0, 200)));
+          else reject(new Error("Resposta inesperada NVIDIA: " + data.slice(0,200)));
         } catch (e) { reject(e); }
       });
     });
-    req.on('error', reject);
+    req.on("error", reject);
     req.write(body);
     req.end();
   });
 }
 
-// ============================================================
-// IA LOCAL — Agente Local (porta 4001)
-// ============================================================
-
-function callLocalAgent(prompt) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ prompt });
-    const options = {
-      hostname: '127.0.0.1',
-      port: 4001,
-      path: '/agent',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      }
-    };
-    const req = http.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('Resposta inválida do agente local.')); }
-      });
-    });
-    req.setTimeout(58000, () => { req.destroy(); reject(new Error('timeout')); });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-// Fallback inteligente: tenta agente local, cai no Gemini se necessário
 async function askWithFallback(chatId, prompt) {
   try {
     const result = await callLocalAgent(prompt);
@@ -161,13 +118,13 @@ async function askWithFallback(chatId, prompt) {
     throw new Error(result.error || 'fallback solicitado pelo agente');
   } catch (err) {
     console.warn(`[LOCAL FALLBACK] ${err.message}`);
-    await bot.sendMessage(chatId, '\u26A0\uFE0F IA local indisponível. Redirecionando para Gemini...');
-    if (!geminiKey) {
-      return bot.sendMessage(chatId, '\u274C Gemini também indisponível (GEMINI_API_KEY ausente).');
+    await bot.sendMessage(chatId, '\u26A0\uFE0F IA local indisponível. Redirecionando para NVIDIA...');
+    if (!nvidiaKey) {
+      return bot.sendMessage(chatId, '\u274C NVIDIA também indisponível (NVIDIA_API_KEY ausente).');
     }
     try {
-      const answer = await askGemini(prompt);
-      const header = '_\u2728 (via Gemini 2.0 Flash \u2014 fallback automático)_\n\n';
+      const answer = await askNvidia(prompt);
+      const header = '_\u2728 (via NVIDIA NIM (Llama 3.1 8B) \u2014 fallback automático)_\n\n';
       const full = header + answer;
       const chunks = full.match(/.{1,4000}/gs) || [full];
       for (const chunk of chunks) {
@@ -207,7 +164,7 @@ bot.onText(/^\/start$/, (msg) => {
     '/nota [texto] \u2014 Salva nota rápida no diário de hoje',
     '/noticias \u2014 Roda Tech Scraper PT/BR sob demanda',
     '/local [prompt] \u2014 Consulta a IA local offline (Qwen 0.5B)',
-    '/ia [pergunta] \u2014 Consulta o Gemini 2.0 Flash diretamente',
+    '/ia [pergunta] \u2014 Consulta o NVIDIA NIM (Llama 3.1 8B) diretamente',
     '/buscar [texto] \u2014 Busca semântica no Cérebro (RAG)',
     '/indexar \u2014 Reindexar o Cérebro para busca vetorial',
     '/backup \u2014 Envia .tar.gz com todo o Cérebro',
@@ -323,28 +280,28 @@ bot.onText(/^\/local (.+)/, async (msg, match) => {
 });
 
 // ============================================================
-// COMANDO: /ia [pergunta] — GEMINI DIRETO
-// Migrado de Claude/Anthropic para Gemini 2.0 Flash em 31/05/2026
-// GEMINI_API_KEY configurada no .env ✔️
+// COMANDO: /ia [pergunta] — NVIDIA DIRETO
+// Migrado de Claude/Anthropic para NVIDIA NIM (Llama 3.1 8B) em 31/05/2026
+// NVIDIA_API_KEY configurada no .env ✔️
 // Erro de quota = plano gratuito esgotado (reset à meia-noite)
 // ============================================================
 
 bot.onText(/^\/ia (.+)/, async (msg, match) => {
   if (!isAuthorized(msg)) return;
-  if (!geminiKey) {
-    return bot.sendMessage(msg.chat.id, '\u274C GEMINI_API_KEY não configurada no .env.');
+  if (!nvidiaKey) {
+    return bot.sendMessage(msg.chat.id, '\u274C NVIDIA_API_KEY não configurada no .env.');
   }
   const question = match[1].trim();
-  bot.sendMessage(msg.chat.id, '\uD83E\uDD14 Consultando Gemini 2.0 Flash...');
+  bot.sendMessage(msg.chat.id, '\uD83E\uDD14 Consultando NVIDIA NIM (Llama 3.1 8B)...');
   try {
-    const answer = await askGemini(question);
+    const answer = await askNvidia(question);
     const chunks = answer.match(/.{1,4000}/gs) || [answer];
     for (const chunk of chunks) {
       await bot.sendMessage(msg.chat.id, chunk).catch(() => bot.sendMessage(msg.chat.id, chunk));
     }
   } catch (e) {
     console.error('[IA ERROR]', e.message);
-    bot.sendMessage(msg.chat.id, `\u274C Erro ao consultar Gemini:\n_${e.message}_`, { parse_mode: 'Markdown' });
+    bot.sendMessage(msg.chat.id, `\u274C Erro ao consultar NVIDIA:\n_${e.message}_`, { parse_mode: 'Markdown' });
   }
 });
 
@@ -403,7 +360,7 @@ bot.onText(/^\/buscar (.+)/, async (msg, match) => {
 
 // ============================================================
 // COMANDO: /status — TODOS OS SERVIÇOS
-// Atualizado: Anthropic → Gemini em 31/05/2026
+// Atualizado: Anthropic → NVIDIA em 31/05/2026
 // ============================================================
 
 bot.onText(/^\/status$/, async (msg) => {
@@ -418,12 +375,12 @@ bot.onText(/^\/status$/, async (msg) => {
     checkPort(11434)
   ]);
 
-  // Gemini: verifica chave e quota
-  let geminiStatus;
-  if (!geminiKey) {
-    geminiStatus = '\uD83D\uDD34 GEMINI_API_KEY ausente';
+  // NVIDIA: verifica chave e quota
+  let nvidiaStatus;
+  if (!nvidiaKey) {
+    nvidiaStatus = '\uD83D\uDD34 NVIDIA_API_KEY ausente';
   } else {
-    geminiStatus = '\uD83D\uDFE2 KEY ok (quota gratuita — pode estar esgotada)';
+    nvidiaStatus = '\uD83D\uDFE2 KEY ok (quota gratuita — pode estar esgotada)';
   }
 
   const cachePath = path.join(WORKSPACE_ROOT, 'Cerebro', '.vector_cache.json');
@@ -436,7 +393,7 @@ bot.onText(/^\/status$/, async (msg) => {
     `\uD83C\uDF10 *API REST (4000):* ${apiStatus}`,
     `\uD83E\uDD16 *Agente Local (4001):* ${agentStatus}`,
     `\uD83E\uDD99 *llama-server (11434):* ${llmStatus}`,
-    `\uD83D\uDCA1 *Gemini /ia:* ${geminiStatus}`,
+    `\uD83D\uDCA1 *NVIDIA /ia:* ${nvidiaStatus}`,
     `\uD83D\uDD0D *RAG Soberano:* ${ragStatus}`
   ].join('\n');
   bot.sendMessage(msg.chat.id, statusMsg, { parse_mode: 'Markdown' });
@@ -469,4 +426,4 @@ bot.onText(/^\/backup$/, (msg) => {
   });
 });
 
-console.log('\u2705 Chronos v4 (Qwen 0.5B local + Gemini fallback + RAG Soberano) iniciado.');
+console.log('\u2705 Chronos v4 (Qwen 0.5B local + NVIDIA fallback + RAG Soberano) iniciado.');
