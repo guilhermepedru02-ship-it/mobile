@@ -1,7 +1,7 @@
 /**
  * android_bridge.js — Android Bridge Gateway
  * FASE 6.1 — Ponte segura entre IAs externas e o Android
- * Versão: 1.0.0 | Criado por Claude Sonnet 4.6 via MCP | 2026-06-01
+ * Versão: 2.0.0 | TTS Queue System v2 | 2026-06-09
  *
  * Porta: 4444 (apenas localhost — 127.0.0.1)
  * Dependência: pkg install termux-api + app Termux:API instalado
@@ -10,7 +10,7 @@
  */
 
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import dotenv from 'dotenv';
 import path from 'path';
 import { bridgeAuth, getRateLimitStatus } from './bridge_middleware.js';
@@ -45,6 +45,83 @@ function runTermuxCommand(cmd) {
   });
 }
 
+
+// =============================================================================
+// TTS QUEUE SYSTEM v2.0 — Async, nao-bloqueante, multi-IA
+// Problema original: termux-tts-speak bloqueava runTermuxCommand (timeout 10s).
+// Solucao: fila FIFO + spawn + resposta HTTP imediata.
+// =============================================================================
+const ttsQueue = [];          // { text, ia, ts, segments }
+const TTS_MAX_QUEUE   = 10;   // max itens na fila (anti-spam)
+const TTS_MAX_SEGMENT = 120;  // chars por segmento — ~8-10s de fala
+const ttsState = {
+  playing:     false,
+  currentIA:   null,
+  currentText: null,
+  proc:        null,   // processo spawn ativo
+  totalSpoken: 0       // contador acumulado de segmentos
+};
+
+/**
+ * Divide texto em segmentos de no maximo TTS_MAX_SEGMENT chars,
+ * quebrando em pontuacao natural para fala fluente.
+ */
+function segmentText(text) {
+  if (text.length <= TTS_MAX_SEGMENT) return [text];
+  const segments = [];
+  const delimiters = ['. ', '! ', '? ', ': ', '; ', ' — ', ', '];
+  let remaining = text.trim();
+  while (remaining.length > TTS_MAX_SEGMENT) {
+    let splitAt = -1;
+    for (const delim of delimiters) {
+      const idx = remaining.lastIndexOf(delim, TTS_MAX_SEGMENT);
+      if (idx >= 15) { splitAt = idx + delim.length; break; }
+    }
+    if (splitAt === -1) {
+      const spaceIdx = remaining.lastIndexOf(' ', TTS_MAX_SEGMENT);
+      splitAt = spaceIdx > 0 ? spaceIdx + 1 : TTS_MAX_SEGMENT;
+    }
+    segments.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) segments.push(remaining);
+  return segments.filter(s => s.length > 0);
+}
+
+/**
+ * Processa a fila TTS de forma sequencial e assincrona.
+ * Cada segmento e falado via spawn (nao bloqueia o event loop).
+ * Chama-se via setImmediate enquanto houver itens.
+ */
+async function processTtsQueue() {
+  if (ttsState.playing || ttsQueue.length === 0) return;
+  const item = ttsQueue.shift();
+  const segments = segmentText(item.text);
+  ttsState.playing   = true;
+  ttsState.currentIA = item.ia;
+  for (const seg of segments) {
+    if (!ttsState.playing) break; // cancelamento durante reproducao
+    ttsState.currentText = seg;
+    await new Promise((resolve) => {
+      const safeText = seg.replace(/"/g, "''").replace(/\n/g, ' ');
+      const proc = spawn('termux-tts-speak', [safeText], { stdio: 'ignore', detached: false });
+      ttsState.proc = proc;
+      const safetyTimer = setTimeout(() => {
+        try { proc.kill('SIGTERM'); } catch (_) {}
+        resolve();
+      }, 20_000);
+      proc.on('close', () => { clearTimeout(safetyTimer); resolve(); });
+      proc.on('error', () => { clearTimeout(safetyTimer); resolve(); });
+    });
+    ttsState.totalSpoken++;
+  }
+  ttsState.playing     = false;
+  ttsState.currentIA   = null;
+  ttsState.currentText = null;
+  ttsState.proc        = null;
+  if (ttsQueue.length > 0) setImmediate(processTtsQueue);
+}
+
 // =============================================================================
 // CAMADA 1: ROTAS READ — implementadas primeiro, validadas antes das WRITE
 // =============================================================================
@@ -77,18 +154,32 @@ app.post('/bridge/wifi', bridgeAuth('read:wifi'), async (req, res) => {
   try {
     const data = await runTermuxCommand('termux-wifi-connectioninfo');
     // Android 10+ bloqueia SSID em background (bssid=02:00:00:00:00:00, network_id=-1)
+    const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
     const isBlocked = !data.ssid || data.ssid === '<unknown ssid>';
     if (!isBlocked) {
-      // Salva cache com SSID valido
+      // SSID real disponivel — salva cache fresco
       const { writeFileSync } = await import('fs');
       writeFileSync(CACHE_FILE, JSON.stringify({ ssid: data.ssid, ts: Date.now() }));
     } else {
-      // Tenta usar cache
+      // Android bloqueou SSID — tenta cache recente (max 30min)
       try {
         const { readFileSync } = await import('fs');
         const cached = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
-        if (cached.ssid) { data.ssid = cached.ssid; data.ssid_cached = true; }
-      } catch (_) { /* sem cache ainda */ }
+        const cacheAgeMin = Math.round((Date.now() - cached.ts) / 60000);
+        if (cached.ssid && (Date.now() - cached.ts) < CACHE_TTL_MS) {
+          data.ssid = cached.ssid;
+          data.ssid_source = `cache_${cacheAgeMin}min`;
+        } else {
+          // Cache expirado ou ausente — reporta honestamente
+          data.ssid = null;
+          data.ssid_source = 'android_blocked' ;
+          data.ssid_hint = 'Ative localizacao no Android para ler SSID em background';
+        }
+      } catch (_) {
+        data.ssid = null;
+        data.ssid_source = 'android_blocked';
+        data.ssid_hint = 'Ative localizacao no Android para ler SSID em background';
+      }
     }
     logAudit({ ia, scope: 'read:wifi', operation: 'termux-wifi-connectioninfo', status: 'OK' });
     res.json({ success: true, data });
@@ -247,26 +338,74 @@ app.post('/bridge/clipboard/set', bridgeAuth('write:clipboard'), async (req, res
 });
 
 /**
- * POST /bridge/tts
- * Converte texto em fala (text-to-speech).
+ * POST /bridge/tts — TTS Queue System v2.0
+ * Enfileira texto para sintese de voz. Resposta IMEDIATA — nao bloqueia.
+ * Segmenta automaticamente textos longos em pontuacao natural.
  * Escopo: write:tts
- * Body: { text: string }
+ * Body : { text: string }   (ate 800 chars — sera segmentado se necessario)
+ * Resp : { success, queued, position, segments, playing }
  */
-app.post('/bridge/tts', bridgeAuth('write:tts'), async (req, res) => {
+app.post('/bridge/tts', bridgeAuth('write:tts'), (req, res) => {
   const ia = req.bridgeIdentity.name;
   const { text } = req.body || {};
 
-  if (!text) return res.status(400).json({ error: 'Campo "text" obrigatório' });
-  if (text.length > 500) return res.status(400).json({ error: 'Texto muito longo (máx 500 chars para TTS)' });
+  if (!text || typeof text !== 'string')
+    return res.status(400).json({ error: 'Campo "text" obrigatorio (string)' });
 
-  try {
-    await runTermuxCommand(`termux-tts-speak "${text.replace(/"/g, "'")}"`);
-    logAudit({ ia, scope: 'write:tts', operation: 'termux-tts-speak', status: 'OK' });
-    res.json({ success: true });
-  } catch (err) {
-    logAudit({ ia, scope: 'write:tts', operation: 'termux-tts-speak', status: 'ERROR', reason: err.message });
-    res.status(500).json({ success: false, error: err.message });
+  const clean = text.trim().slice(0, 800);
+  if (clean.length === 0)
+    return res.status(400).json({ error: 'Texto vazio apos sanitizacao' });
+
+  if (ttsQueue.length >= TTS_MAX_QUEUE) {
+    logAudit({ ia, scope: 'write:tts', operation: 'enqueue', status: 'REJECTED', reason: 'queue_full' });
+    return res.status(429).json({ error: 'Fila TTS cheia (max 10). Tente em instantes.', queue_size: ttsQueue.length });
   }
+
+  const segs = segmentText(clean);
+  ttsQueue.push({ text: clean, ia, ts: Date.now(), segments: segs.length });
+  const position = ttsQueue.length;
+
+  logAudit({ ia, scope: 'write:tts', operation: 'enqueue', status: 'OK',
+    meta: { position, segments: segs.length, chars: clean.length } });
+
+  res.json({ success: true, queued: true, position, segments: segs.length, playing: ttsState.playing });
+
+  // Inicia processamento se ocioso
+  setImmediate(processTtsQueue);
+});
+
+/**
+ * GET /bridge/tts/status — Estado em tempo real da fila TTS.
+ * Publico (sem auth) — util para monitoramento por qualquer IA.
+ */
+app.get('/bridge/tts/status', (req, res) => {
+  res.json({
+    playing:      ttsState.playing,
+    current_ia:   ttsState.currentIA,
+    current_text: ttsState.currentText,
+    queue_size:   ttsQueue.length,
+    queue_items:  ttsQueue.map(i => ({ ia: i.ia, segments: i.segments, chars: i.text.length })),
+    total_spoken: ttsState.totalSpoken
+  });
+});
+
+/**
+ * POST /bridge/tts/cancel — Para o TTS imediatamente e limpa a fila.
+ * Escopo: write:tts
+ */
+app.post('/bridge/tts/cancel', bridgeAuth('write:tts'), (req, res) => {
+  const ia = req.bridgeIdentity.name;
+  const cleared = ttsQueue.length;
+  ttsQueue.length = 0;
+  ttsState.playing     = false;
+  ttsState.currentIA   = null;
+  ttsState.currentText = null;
+  if (ttsState.proc) {
+    try { ttsState.proc.kill('SIGTERM'); } catch (_) {}
+    ttsState.proc = null;
+  }
+  logAudit({ ia, scope: 'write:tts', operation: 'cancel', status: 'OK', meta: { cleared } });
+  res.json({ success: true, cleared });
 });
 
 /**
@@ -375,8 +514,8 @@ app.get('/bridge/audit', (req, res) => {
 app.get('/bridge/status', (req, res) => {
   res.json({
     service: 'Android Bridge Gateway',
-    version: '1.0.0',
-    fase: 'FASE 6.1 — READ + WRITE implementados',
+    version: '2.0.0',
+    fase: 'FASE 6.2 — TTS Queue System v2.0',
     status: 'operational',
     timestamp: new Date().toISOString(),
     porta: PORT,
@@ -391,7 +530,9 @@ app.get('/bridge/status', (req, res) => {
       write: [
         'POST /bridge/notification   ← write:notification',
         'POST /bridge/clipboard/set  ← write:clipboard',
-        'POST /bridge/tts            ← write:tts',
+        'POST /bridge/tts            ← write:tts (fila async)',
+        'GET  /bridge/tts/status      ← publico (monitoramento)',
+        'POST /bridge/tts/cancel      ← write:tts (para + limpa fila)',
         'POST /bridge/intent/open    ← intent:open_app'
       ],
       management: [
@@ -412,7 +553,7 @@ app.get('/bridge/status', (req, res) => {
 // INICIALIZAÇÃO
 // =============================================================================
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n[ANDROID BRIDGE] 🚀 Gateway v1.0.0 rodando`);
+  console.log(`\n[ANDROID BRIDGE] 🚀 Gateway v2.0.0 rodando | TTS Queue System v2`);
   console.log(`[ANDROID BRIDGE] 🌐 http://127.0.0.1:${PORT}/bridge/status`);
   console.log(`[ANDROID BRIDGE] 🛡️  Segurança: Escopos + Rate Limiting + Auditoria`);
   console.log(`[ANDROID BRIDGE] 📥 READ: battery | wifi | location | clipboard | storage`);
