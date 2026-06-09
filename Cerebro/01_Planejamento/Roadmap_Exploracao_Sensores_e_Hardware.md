@@ -1,135 +1,101 @@
-# Roadmap de Exploração Profunda — Sensores, Hardware e Automação
+# Estratégia de Sensores — Workspace Mobile
 
-**Data:** 2026-06-08
-**Origem:** Diagnóstico Massivo v3 (Claude Opus 4.6 via MCP)
-**Escopo:** Projetos de média e baixa prioridade que exploram as 37 APIs e 45 sensores do dispositivo
-
----
-
-## 🟡 PRIORIDADE MÉDIA — Evolução da Plataforma
-
-### 1. 💡 Automação IoT com Infravermelho
-- **O que:** Usar `termux-infrared-transmit` para controlar TV, ar-condicionado, ventiladores e qualquer dispositivo com receptor IR
-- **Como implementar:**
-  1. Mapear os códigos IR dos eletrodomésticos (banco público LIRC/IRDB ou captura manual)
-  2. Criar um `Scripts/core/ir_controller.js` com funções por dispositivo
-  3. Registrar como ferramenta no `tool_registry.json` para acesso do agente
-  4. Expor no Hub PWA como controle remoto visual
-- **Dependências:** `termux-infrared-frequencies` (disponível), `termux-infrared-transmit` (disponível)
-- **Complexidade:** Média — o desafio é mapear os códigos corretos
-- **Impacto:** O celular vira controle remoto universal inteligente comandado por voz/IA
-
-### 2. 🌡️ Hub de Monitoramento Ambiental
-- **O que:** Dashboard real-time combinando múltiplos sensores para consciência ambiental
-- **Sensores utilizados:**
-  - `light_ltr569` — luminosidade ambiente (lux)
-  - `acc_bma2x2` — vibração/movimento
-  - Temperatura da bateria como proxy de temperatura ambiente
-  - `Device Orientation` — posição do dispositivo
-  - `Step Counter` — atividade física
-- **Como implementar:**
-  1. `termux-sensor -s "light_ltr569" -d 5000` → streaming contínuo
-  2. WebSocket bridge para o Hub PWA
-  3. Gráficos de série temporal com Chart.js ou similar
-  4. Histórico salvo em SQLite ou JSON rotativo
-- **Complexidade:** Média-alta — requer streaming e visualização
-- **Impacto:** Base para automação contextual ("está escuro → ligar luz", "parado há 2h → lembrar de se mover")
-
-### 3. 🔔 Sistema de Alertas Inteligentes
-- **O que:** IA proativa que combina sensores + notificações + TTS para alertas automáticos
-- **Cenários de alerta:**
-  - Bateria < 20% → `termux-notification` + `termux-vibrate` + TTS
-  - Memória RAM crítica → sugerir encerrar processos
-  - Sensor `Pocket mode` + movimento prolongado → sugerir pausa
-  - WiFi desconectado → alerta + tentar reconectar
-  - Horário programado → briefing diário via TTS
-- **Como implementar:**
-  1. Cron job leve a cada 5 minutos verificando condições
-  2. Motor de regras simples em JSON (condição → ação)
-  3. Integração com `termux-notification`, `termux-tts-speak`, `termux-vibrate`
-- **Complexidade:** Média — requer TTS funcionando (prioridade alta)
-- **Impacto:** Agente que cuida ativamente do usuário e do dispositivo
-
-### 4. 📷 Pipeline de Visão Computacional
-- **O que:** Usar câmeras + IA cloud para análise visual programática
-- **Casos de uso:**
-  - OCR de documentos e notas manuscritas
-  - Leitura de QR codes
-  - Identificação de objetos/produtos
-  - Monitoramento visual de ambiente (segurança)
-- **Como implementar:**
-  1. `termux-camera-photo -c 0 /path/foto.jpg` → captura
-  2. Enviar para NVIDIA NIM com modelo de visão (ou Llama Vision)
-  3. Interpretar resultado e tomar ação
-- **Dependências:** Modelo de visão na NVIDIA NIM; alternativa: Pillow + tesseract local
-- **Complexidade:** Média-alta
-- **Impacto:** Digitalização instantânea, segurança visual, leitura automática
-
-### 5. 📱 App Nativo Android (Plano Mestre)
-- **O que:** Interface nativa substituindo o Bot Telegram como interface primária
-- **Fases:**
-  - **Fase 1:** Interface nativa com comunicação via API REST (4000)
-  - **Fase 2:** SQLite local para persistência + histórico de conversas
-  - **Fase 3:** Widgets Android para acesso rápido
-- **Complexidade:** Alta
-- **Impacto:** UX premium, independência total do Telegram, offline-first
+**Data:** 2026-06-09
+**Versão:** v1.0
+**Origem:** TASK-0609-A — Expansão tool_registry v2.8.0
 
 ---
 
-## 🟢 PRIORIDADE BAIXA — Expansão Futura
+## Sensores Priorizados (tool_registry v2.8.0)
 
-### 6. 🎙️ Assistente por Voz Completo
-- **O que:** Loop completo STT → IA → TTS para interação hands-free
-- **Pipeline:**
-  1. `termux-microphone-record -f /path/audio.wav -l 10` → captura
-  2. Whisper local (se caber na RAM) ou API de STT → texto
-  3. Qwen local ou NVIDIA NIM → raciocínio
-  4. `termux-tts-speak` → resposta falada
-- **Desafio:** Whisper consome muita RAM; precisaria de offloading para cloud STT
-- **Complexidade:** Alta
-- **Impacto:** Assistente conversacional completo, mãos livres
+### 🟢 Implementados e Ativos
 
-### 7. 📍 Geofencing e Automação por Localização
-- **O que:** Ações automáticas baseadas em posição GPS
-- **Cenários:**
-  - Chegar em casa → ligar WiFi, ativar perfil noturno
-  - Sair de casa → verificar tarefas pendentes, briefing
-  - Entrar no trabalho → silenciar, modo foco
-- **Como:** `termux-location` polling periódico → comparar com coordenadas salvas → trigger
-- **Complexidade:** Média
-- **Impacto:** Automação contexto-espacial
+| Tool ID | Sensor / API | Prioridade | Motivo |
+|---|---|---|---|
+| `read_battery` | `termux-battery-status` + Bridge `/bridge/read/battery` | **Imediato** | Alta demanda de linguagem natural ("bateria tá boa?") |
+| `read_wifi` | `termux-wifi-connectioninfo` + Bridge `/bridge/read/wifi` | **Imediato** | Diagnóstico de conectividade frequente |
+| `read_location` | `termux-location` + Bridge `/bridge/read/location` | **Imediato** | Geofencing futuro + contexto espacial |
+| `read_sensors` | `termux-sensor` (light, prox, acc) | **Imediato** | Base para automação contextual |
 
-### 8. 🔐 Segurança Biométrica para Ações Críticas
-- **O que:** `termux-fingerprint` como gate para operações sensíveis
-- **Ações protegidas:** git push, sms-send, alterações em 00_Sistema, acesso a .env
-- **Como:** Wrapper que chama `termux-fingerprint` e só prossegue se `auth_result: AUTH_RESULT_SUCCESS`
-- **Complexidade:** Baixa-média
-- **Impacto:** Segurança robusta sem senhas
+### 🟡 Próxima Rodada (após validação de 7 dias)
 
-### 9. 🎵 Controle de Mídia Inteligente
-- **O que:** Controle contextual de música/podcast via gestos e IA
-- **Sensores:** ChopChop (agitar), Flip (virar), `termux-volume`, `termux-media-player`
-- **Cenários:**
-  - Virar o celular = pausar música
-  - ChopChop = próxima faixa
-  - Volume auto-ajustado por ambiente (sensor de luz como proxy de local)
-- **Complexidade:** Média
-- **Impacto:** Experiência de mídia gestual e contextual
-
----
-
-## 📊 Matriz de Dependências
-
-| Projeto | Depende de | APIs Utilizadas |
+| Sensor | API | Caso de Uso |
 |---|---|---|
-| IoT Infravermelho | — | infrared-transmit, infrared-frequencies |
-| Hub Ambiental | — | sensor, battery-status |
-| Alertas Inteligentes | TTS fix | notification, vibrate, tts-speak, battery |
-| Visão Computacional | NVIDIA Vision model | camera-photo, (cloud API) |
-| App Nativo | — | todas (via API REST 4000) |
-| Assistente por Voz | TTS fix + STT | microphone-record, tts-speak |
-| Geofencing | — | location, wifi-enable |
-| Segurança Biométrica | — | fingerprint |
-| Controle de Mídia | — | sensor, media-player, volume |
+| Câmera | `termux-camera-photo` | OCR, visão computacional, segurança visual |
+| Microfone | `termux-microphone-record` | Assistente por voz (STT → IA → TTS) |
+| Infravermelho | `termux-infrared-transmit` | Controle de TV/AC/ventilador por voz |
+| Notificações | `termux-notification` | Alertas proativos do sistema |
+| Vibração | `termux-vibrate` | Feedback háptico em eventos críticos |
+| Clipboard | `termux-clipboard-get/set` | Integração com workflow de texto |
 
-> **Todos os projetos utilizam APIs já disponíveis no dispositivo. Nenhum requer instalação adicional de hardware.**
+---
+
+## Arquitetura de Fallback dos Sensores
+
+Cada tool de sensor usa estratégia dual:
+
+```
+1. Android Bridge (porta 4444) — primário, token-auth, auditado
+   ↓ (se offline)
+2. termux-api direta — fallback, sem autenticação, sem audit log
+   ↓ (se unavailable)
+3. JSON de erro padronizado — nunca falha silenciosamente
+```
+
+Exemplo de comando `read_battery`:
+```bash
+curl -s -H 'Authorization: Bearer $BRIDGE_TOKEN_CLAUDE' \
+  http://127.0.0.1:4444/bridge/read/battery \
+  || termux-battery-status \
+  || echo '{"error": "bridge offline, termux-api nao disponivel"}'
+```
+
+---
+
+## Cobertura de Linguagem Natural (PT-BR)
+
+Cada sensor cobre variações coloquiais do português brasileiro:
+
+**Bateria** (21 variantes):
+- Formais: `bateria`, `carga`, `nível bateria`, `status bateria`
+- Coloquiais: `quanto ta a bateria`, `bateria ta boa`, `ta na tomada`, `plugado`
+- Perguntas: `ta carregando`, `descarregando`, `bateria fraca`, `bateria cheia`
+
+**WiFi** (26 variantes):
+- Formais: `wifi`, `ssid`, `rssi`, `mbps`, `ip local`
+- Coloquiais: `to conectado`, `tem internet`, `net ta boa`, `velocidade da net`
+- Técnicas: `ping`, `latencia`, `download`, `upload`, `intensidade sinal`
+
+**Localização** (14 variantes):
+- `onde estou`, `minha localizacao`, `gps`, `coordenadas`, `posicao atual`
+
+**Sensores** (13 variantes):
+- `sensor de luz`, `esta escuro`, `luminosidade`, `acelerometro`, `proximidade`
+
+---
+
+## Campo `requires_biometric`
+
+Preparação para TASK-0609-C (Gate Biométrico):
+
+| Tool | `requires_biometric` | Justificativa |
+|---|---|---|
+| `read_battery` | `false` | Dado não sensível |
+| `read_wifi` | `false` | Dado não sensível |
+| `read_location` | `false` | Sensível mas depende de contexto |
+| `read_sensors` | `false` | Dados agregados não sensíveis |
+| (futuro) `git_push` | `true` | Exfiltração de código |
+| (futuro) `sms_send` | `true` | Custo e privacidade |
+| (futuro) `delete_file` massa | `true` | Operação destrutiva |
+
+> **Nota:** `read:location` deve ser promovido para `requires_biometric: true` quando integrado a geofencing automatizado. No uso manual via Telegram, `false` é aceitável.
+
+---
+
+## Histórico de Versões do tool_registry
+
+| Versão | Data | Mudanças |
+|---|---|---|
+| v2.5.0 | 2026-05-31 | Keywords Unicode completas PT-BR |
+| v2.7.2 | 2026-06-02 | `list_cerebro` adicionado |
+| **v2.8.0** | **2026-06-09** | **+4 sensor tools: battery, wifi, location, sensors** |
