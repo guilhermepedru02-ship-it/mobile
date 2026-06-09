@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 const WORKSPACE_ROOT = '/storage/emulated/0/Workspace';
 const REGISTRY_PATH  = path.join(WORKSPACE_ROOT, 'Scripts/core/tool_registry.json');
+const BIOMETRIC_GATE = path.join(WORKSPACE_ROOT, 'Scripts/core/biometric_gate.sh');
 
 // ============================================================
 // INTENTS
@@ -48,18 +50,38 @@ function resolveDate(str) {
 }
 
 // ============================================================
-// MATCH DE KEYWORD — v2.1.0
+// GATE BIOMÉTRICO — v2.9.0
 // ============================================================
-// Problema anterior: regex (^|[\s,!?])kw([\s,!?]|$) falhava quando:
-//   - prompt era exatamente a keyword (ex: "ram" → $ não batia)
-//   - keyword multi-palavra com espaços internos
-//   - boundary chars \s não incluíam todos os separadores reais
-//
-// Solução: substituímos o regex de boundary por três verificações
-// ordenadas por custo, sem regex complexo:
-//   1. Exact match (prompt normalizado === keyword normalizada)
-//   2. Substring com boundaries simples: espaços ao redor ou bordas
-//   3. includes() direto para keywords multi-palavra (>1 token)
+// Verifica se uma tool requer biometria e solicita autenticação.
+// Retorna: { authorized: true } ou { authorized: false, reason: string }
+// ============================================================
+export function biometricCheck(tool) {
+    if (!tool.requires_biometric) return { authorized: true };
+
+    try {
+        // Verifica se o script existe
+        if (!fs.existsSync(BIOMETRIC_GATE)) {
+            console.error('[BIOMETRIC] Gate script não encontrado:', BIOMETRIC_GATE);
+            return { authorized: false, reason: 'GATE_UNAVAILABLE' };
+        }
+
+        const operationDesc = tool.biometric_label || tool.description?.slice(0, 60) || tool.id;
+        execSync(`bash "${BIOMETRIC_GATE}" "${operationDesc.replace(/"/g, '')}"`
+            , { stdio: 'inherit', timeout: 30000 });
+
+        return { authorized: true };
+    } catch (err) {
+        // execSync lança se o exit code != 0
+        const code = err.status || 1;
+        if (code === 2) {
+            return { authorized: false, reason: 'BIOMETRIC_UNAVAILABLE' };
+        }
+        return { authorized: false, reason: 'AUTH_DENIED' };
+    }
+}
+
+// ============================================================
+// MATCH DE KEYWORD — v2.1.0
 // ============================================================
 function keywordMatches(normalizedPrompt, normalizedKeyword) {
     const p = normalizedPrompt;
@@ -69,19 +91,17 @@ function keywordMatches(normalizedPrompt, normalizedKeyword) {
     if (p === k) return true;
 
     // 2. Para keywords de uma só palavra: exige que seja token isolado
-    //    (não "ram" dentro de "ferramentas")
     if (!k.includes(' ')) {
-        // boundary: início/fim de string ou caractere não-alfanumérico
         const re = new RegExp('(?:^|[^a-z0-9])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-z0-9]|$)', 'u');
         return re.test(p);
     }
 
-    // 3. Keyword multi-palavra: substring simples (já é específica o suficiente)
+    // 3. Keyword multi-palavra: substring simples
     return p.includes(k);
 }
 
 // ============================================================
-// DISPATCH v2.1.0
+// DISPATCH v2.9.0 — + Biometric Gate
 // ============================================================
 export function dispatch(prompt) {
     const normalized = normalize(prompt);
@@ -96,6 +116,21 @@ export function dispatch(prompt) {
             const resolvedTool = { ...tool };
             if (resolvedTool.path)    resolvedTool.path    = resolveDate(resolvedTool.path);
             if (resolvedTool.command) resolvedTool.command = resolveDate(resolvedTool.command);
+
+            // Verifica gate biométrico antes de retornar a tool
+            if (resolvedTool.requires_biometric) {
+                const check = biometricCheck(resolvedTool);
+                if (!check.authorized) {
+                    return {
+                        intent: INTENT.TOOL_CALL,
+                        tool: null,
+                        blocked: true,
+                        blocked_reason: check.reason,
+                        blocked_tool_id: resolvedTool.id
+                    };
+                }
+            }
+
             return { intent: INTENT.TOOL_CALL, tool: resolvedTool };
         }
     }
