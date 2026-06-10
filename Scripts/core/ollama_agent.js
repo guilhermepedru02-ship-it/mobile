@@ -177,6 +177,90 @@ function isLowQuality(resp, userPrompt) {
 }
 
 // ==========================================
+
+// ============================================================
+// FORMAT TOOL OUTPUT v1.0
+// Converte JSON de sensores/bridge em texto PT-BR legivel.
+// Chamado no DIRECT OUTPUT path para battery, wifi, location, cloud_usage, mcp_sessions.
+// ============================================================
+function formatToolOutput(toolId, rawOutput) {
+    if (!rawOutput || typeof rawOutput !== 'string') return rawOutput;
+    const text = rawOutput.trim();
+    let data = null;
+    try { data = JSON.parse(text); } catch(e) { return rawOutput; }
+    if (!data || !data.success) return rawOutput;
+    const d = data.data || data;
+
+    switch(toolId) {
+        case 'read_battery': {
+            if (d.percentage === undefined) return rawOutput;
+            const statusMap = { FULL: 'carregada', CHARGING: 'carregando', DISCHARGING: 'descarregando', NOT_CHARGING: 'nao carregando', UNKNOWN: 'desconhecido' };
+            const statusPT  = statusMap[d.status] || (d.status || '?');
+            const pluggedPT = (d.plugged === 'UNPLUGGED') ? 'desconectado da tomada' : 'na tomada';
+            const healthPT  = (d.health === 'GOOD') ? 'boa' : (d.health || '?');
+            return [
+                'Bateria: ' + d.percentage + '%',
+                'Status: '  + statusPT,
+                'Tomada: '  + pluggedPT,
+                'Temperatura: ' + (d.temperature || '?') + '°C',
+                'Saude: '   + healthPT,
+                'Tecnologia: ' + (d.technology || 'Li-ion')
+            ].join('
+');
+        }
+        case 'read_wifi': {
+            if (!d.ssid && !d.ip) return rawOutput;
+            const freqGhz = (d.frequency_mhz > 5000) ? '5 GHz' : '2.4 GHz';
+            const rssi     = d.rssi || d.rssiDbm;
+            const qualidade = rssi > -50 ? 'Excelente' : rssi > -65 ? 'Bom' : rssi > -75 ? 'Regular' : 'Fraco';
+            const velMbps  = d.link_speed || d.linkSpeedMbps;
+            const parts    = [
+                'Rede: '      + (d.ssid || 'desconhecido'),
+                'Frequencia: ' + freqGhz,
+                'IP local: '  + (d.ip   || '?'),
+                'Sinal: '     + (rssi   ? (rssi + ' dBm (' + qualidade + ')') : qualidade)
+            ];
+            if (velMbps) parts.push('Velocidade: ' + velMbps + ' Mbps');
+            if (d.bssid) parts.push('BSSID: ' + d.bssid);
+            return parts.join('
+');
+        }
+        case 'read_location': {
+            if (!d.latitude) return rawOutput;
+            const parts = [
+                'Latitude: '  + parseFloat(d.latitude).toFixed(6),
+                'Longitude: ' + parseFloat(d.longitude).toFixed(6)
+            ];
+            if (d.accuracy) parts.push('Precisao: ' + Math.round(d.accuracy) + 'm');
+            if (d.altitude) parts.push('Altitude: ' + Math.round(d.altitude) + 'm');
+            if (d.provider) parts.push('Provedor: ' + d.provider);
+            return parts.join('
+');
+        }
+        case 'cloud_usage': {
+            const calls  = d.calls_today !== undefined ? d.calls_today : d.calls;
+            const parts  = [
+                'Data: '            + (d.today   || d.date || 'hoje'),
+                'Chamadas hoje: '   + calls + ' / ' + d.limit,
+                'Tokens usados: '   + d.tokens_used,
+                'Restantes: '       + d.remaining + ' chamadas'
+            ];
+            return parts.join('
+');
+        }
+        case 'mcp_sessions': {
+            const parts = ['MCP Server: ' + (d.status || 'online')];
+            if (d.version)          parts.push('Versao: '          + d.version);
+            if (d.activeSessions !== undefined) parts.push('Sessoes ativas: ' + d.activeSessions);
+            if (d.uptime)           parts.push('Uptime: '          + d.uptime);
+            return parts.join('
+');
+        }
+        default:
+            return rawOutput;
+    }
+}
+
 // PIPELINE PRINCIPAL — v2.2.0
 // ==========================================
 export async function runAgent(userPrompt) {
@@ -238,7 +322,8 @@ export async function runAgent(userPrompt) {
             const DIRECT_OUTPUT_TOOLS = [
                 'identity_check', 'list_tools', 'list_cerebro', 'ram_status', 'disk_usage', 'git_status', 'git_log',
                 'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
-                'cloud_usage', 'kanban_read', 'diary_today'
+                'cloud_usage', 'kanban_read', 'diary_today',
+                'read_battery', 'read_wifi', 'read_location', 'read_sensors', 'mcp_sessions', 'channel_read', 'tech_news'
             ];
             if (DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
                 const friendlyError = `Chronos: Ferramenta "${tool.id}" indisponível. Erro: ${errMsg}`;
@@ -249,7 +334,21 @@ export async function runAgent(userPrompt) {
             toolOutput = null;
 
         } else {
-            toolOutput = result.content || result.stdout || result.detail || JSON.stringify(result);
+            const rawOutput = result.content || result.stdout || result.detail || JSON.stringify(result);
+            
+            // FIX: Detecta resposta HTML (bridge caida ou endpoint errado) como falha
+            const isHtmlError = typeof rawOutput === 'string' && rawOutput.trimStart().startsWith('<!DOCTYPE');
+            if (isHtmlError) {
+                toolFailed = true;
+                const htmlErr = 'Bridge retornou HTML (servico offline ou endpoint invalido)';
+                log(`TOOL HTML_ERROR: ${tool.id} — ${htmlErr}`);
+                completeStep(`tool_exec:${tool.id}`, `HTML_ERROR: bridge offline`);
+                const friendlyError = `Chronos [${tool.id}]: Serviço offline — Bridge não está respondendo. Verifique se o android_bridge está rodando (porta 4444).`;
+                finishTask(`Bridge offline: ${tool.id}`);
+                return { success: false, intent, tool: tool.id, response: friendlyError, source: 'bridge_error' };
+            }
+
+            toolOutput = rawOutput;
             completeStep(`tool_exec:${tool.id}`, toolOutput?.slice(0, 200));
             log(`TOOL SUCCESS: ${toolOutput?.slice(0, 100)}`);
         }
@@ -267,13 +366,15 @@ export async function runAgent(userPrompt) {
     const DIRECT_OUTPUT_TOOLS = [
         'identity_check', 'list_tools', 'list_cerebro', 'ram_status', 'disk_usage', 'git_status', 'git_log',
         'services_health', 'self_health_check', 'llm_status', 'workspace_agent_status',
-        'cloud_usage', 'kanban_read', 'diary_today'
+        'cloud_usage', 'kanban_read', 'diary_today',
+        'read_battery', 'read_wifi', 'read_location', 'read_sensors', 'mcp_sessions', 'channel_read', 'tech_news'
     ];
     if (intent === INTENT.TOOL_CALL && tool && toolOutput && !toolFailed && DIRECT_OUTPUT_TOOLS.includes(tool.id)) {
         log('DIRECT OUTPUT: ' + tool.id);
         completeStep('direct_output', tool.id);
-        finishTask(toolOutput.slice(0, 300));
-        return { success: true, intent, tool: tool.id, response: toolOutput, source: 'tool_direct' };
+        const formattedOutput = formatToolOutput(tool.id, toolOutput);
+        finishTask(formattedOutput.slice(0, 300));
+        return { success: true, intent, tool: tool.id, response: formattedOutput, source: 'tool_direct' };
     }
 
     // 4b. Context Builder

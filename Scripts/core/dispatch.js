@@ -20,7 +20,7 @@ export const INTENT = {
 // Palavras-chave de fallback por intent (quando nenhuma ferramenta casa)
 const INTENT_KEYWORDS = {
     [INTENT.CODE_TASK]:       ['cria', 'crie', 'codifica', 'programa', 'script', 'instala', 'npm', 'git commit', 'refatora'],
-    [INTENT.KNOWLEDGE_QUERY]: ['o que e', 'explica', 'como funciona', 'qual', 'por que', 'diferenca entre', 'busca', 'entende', 'sabe', 'me conta', 'me diz', 'me explica', 'o sistema', 'o que voce', 'voce sabe'],
+    [INTENT.KNOWLEDGE_QUERY]: ['o que e', 'explica', 'como funciona', 'por que', 'diferenca entre', 'busca', 'entende', 'sabe', 'me conta', 'me diz', 'me explica', 'o sistema', 'o que voce', 'voce sabe', 'como foi', 'me ensina', 'me explica'],
     [INTENT.MEMORY_WRITE]:    ['lembre', 'registra', 'anota', 'memoriza', 'salva isso', 'guarda'],
     [INTENT.CREATIVE_TASK]:   ['escreve', 'redige', 'gera texto', 'cria um texto', 'componha']
 };
@@ -106,6 +106,12 @@ function keywordMatches(normalizedPrompt, normalizedKeyword) {
 export function dispatch(prompt) {
     const normalized = normalize(prompt);
     const registry   = loadRegistry();
+
+    // 0. Match exato pelo ID da ferramenta (usuario digitou o nome da tool diretamente)
+    const directToolMatch = registry.tools.find(t => normalize(t.id) === normalized || normalize(t.id).replace(/_/g, '') === normalized.replace(/[_\s-]/g, ''));
+    if (directToolMatch) {
+        return { intent: INTENT.TOOL_CALL, tool: directToolMatch };
+    }
 
     // 1. Casa com ferramenta do registry (tool call)
     for (const tool of registry.tools) {
