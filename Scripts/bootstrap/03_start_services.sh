@@ -195,7 +195,7 @@ if check_port 4444 "bridge/status"; then
   ok "Android Bridge já ativo (4444)"
 else
   info "Subindo Android Bridge..."
-  tmux_run "bridge" "while true; do pkill -f 'termux-tts-speak' 2>/dev/null; pkill -f 'TextToSpeech' 2>/dev/null; cd $CORE && NODE_OPTIONS=--max-old-space-size=80 node android_bridge.js >> $LOGS/android_bridge.log 2>&1; bash /storage/emulated/0/Workspace/Scripts/core/ws-protect.sh >> $LOGS/protect.log 2>&1; sleep 5; done"
+  tmux_run "bridge" "bash /storage/emulated/0/Workspace/Scripts/core/ws-bridge-loop.sh"
   sleep 4
   check_port 4444 "bridge/status" && ok "Android Bridge online (4444)" || warn "Android Bridge — ver $LOGS/bridge.log"
 fi
