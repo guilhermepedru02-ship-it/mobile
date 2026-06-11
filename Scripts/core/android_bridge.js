@@ -16,6 +16,29 @@ import path from 'path';
 import { bridgeAuth, getRateLimitStatus } from './bridge_middleware.js';
 import { logAudit, getAuditLog, getAuditStats } from './bridge_audit.js';
 
+// Cleanup TTS orphans de sessoes anteriores (anti-signal9 residual)
+exec("kill $(ps aux | grep 'termux-tts-speak' | grep -v grep | awk '{print $2}') 2>/dev/null || true",
+  (err, stdout, stderr) => { console.log('[Bridge] Cleanup TTS orphans na inicializacao'); }
+);
+
+// Cleanup periodico de TTS zumbis a cada 60s (previne acumulo durante sessao)
+// Cleanup TTS zumbis a cada 20s -- threshold >1 previne acumulo (load alto / signal9)
+setInterval(() => {
+  exec("pgrep -fc 'termux-tts-speak' 2>/dev/null || echo 0", (e, out) => {
+    const count = parseInt(out.trim(), 10) || 0;
+    if (count > 1) {
+      exec("pkill -f 'termux-tts-speak' 2>/dev/null; pkill -f 'TextToSpeech' 2>/dev/null; true", () => {
+        console.log(`[Bridge] Cleanup TTS: ${count} zumbis eliminados`);
+        if (ttsState.playing) {
+          ttsState.playing = false;
+          ttsState.proc = null;
+          if (ttsQueue.length > 0) setImmediate(processTtsQueue);
+        }
+      });
+    }
+  });
+}, 20_000);
+
 dotenv.config({ path: '/storage/emulated/0/Workspace/Scripts/core/.env' });
 
 const app = express();
@@ -53,7 +76,7 @@ function runTermuxCommand(cmd) {
 // =============================================================================
 const ttsQueue = [];          // { text, ia, ts, segments }
 const TTS_MAX_QUEUE   = 10;   // max itens na fila (anti-spam)
-const TTS_MAX_SEGMENT = 120;  // chars por segmento — ~8-10s de fala
+const TTS_MAX_SEGMENT = 200;  // chars por segmento — ~13-16s de fala natural
 const ttsState = {
   playing:     false,
   currentIA:   null,
@@ -106,10 +129,12 @@ async function processTtsQueue() {
       const safeText = seg.replace(/"/g, "''").replace(/\n/g, ' ');
       const proc = spawn('termux-tts-speak', [safeText], { stdio: 'ignore', detached: false });
       ttsState.proc = proc;
+      // Timeout dinamico: ~130wpm, 5 chars/palavra + 4s buffer (anti-zumbi)
+      const _wTimeout = Math.ceil((safeText.length / 650) * 60_000) + 4_000;
       const safetyTimer = setTimeout(() => {
         try { proc.kill('SIGTERM'); } catch (_) {}
         resolve();
-      }, 20_000);
+      }, _wTimeout);
       proc.on('close', () => { clearTimeout(safetyTimer); resolve(); });
       proc.on('error', () => { clearTimeout(safetyTimer); resolve(); });
     });

@@ -1,26 +1,49 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# ws-protect — Protege processos críticos do Android OOM Killer via renice
-# Chamado pelo boot do Termux após os serviços subirem
-# Uso: bash ws-protect  ou  ws-protect (se no PATH)
+# ws-protect v2.0 — Anti-zumbi TTS + renice nos processos críticos
+# Chamado pelo bootstrap após subida dos serviços E pelo loop while-true
+# Uso: bash Scripts/core/ws-protect.sh
+# NOTA: oom_score_adj exige root no Android — não tentamos escrever.
+# Proteção real: wake-lock + renice + eliminação de zumbis TTS.
 
+echo "[ws-protect v2.0] Iniciando..."
+
+# ── 1. LIMPAR ZUMBIS TTS ─────────────────────────────────────────────────────
+# TTS acumulados são a principal causa de load alto → signal9
+TTS_COUNT=$(pgrep -fc 'termux-tts-speak' 2>/dev/null || echo 0)
+TEXTTOS_COUNT=$(pgrep -fc 'TextToSpeech' 2>/dev/null || echo 0)
+
+if [ "${TTS_COUNT:-0}" -gt 2 ]; then
+  pkill -f 'termux-tts-speak' 2>/dev/null
+  echo "[OK] $TTS_COUNT zumbi(s) termux-tts-speak eliminados"
+fi
+if [ "${TEXTTOS_COUNT:-0}" -gt 2 ]; then
+  pkill -f 'TextToSpeech' 2>/dev/null
+  echo "[OK] $TEXTTOS_COUNT zumbi(s) TextToSpeech eliminados"
+fi
+
+# ── 2. RENICE NOS PROCESSOS CRÍTICOS (node + bash wrapper) ───────────────────
 SERVICES=(
-  "mcp_server.js:MCP Server"
   "llama-server:Llama Server"
-  "workspace_agent:Workspace Agent"
-  "android_bridge:Android Bridge"
+  "mcp_server.js:MCP Server"
+  "workspace_agent_server.js:Workspace Agent"
+  "android_bridge.js:Android Bridge"
 )
-
-echo "[ws-protect] Aplicando proteção OOM nos processos críticos..."
 
 for entry in "${SERVICES[@]}"; do
   pattern="${entry%%:*}"
   label="${entry##*:}"
-  PID=$(pgrep -f "$pattern" | grep -v bash | head -1)
-  if [ -n "$PID" ]; then
-    renice -n -10 -p "$PID" > /dev/null 2>&1 && echo "[OK] $label (PID $PID) protegido"
+  PIDS=$(pgrep -f "$pattern" 2>/dev/null | tr '\n' ' ')
+  if [ -n "$PIDS" ]; then
+    for PID in $PIDS; do
+      renice -n -10 -p "$PID" > /dev/null 2>&1
+    done
+    echo "[OK] $label (PIDs:$PIDS) renice -10"
   else
-    echo "[SKIP] $label não encontrado"
+    echo "[SKIP] $label — não encontrado"
   fi
 done
 
-echo "[ws-protect] Concluído."
+# ── 3. WAKE-LOCK ─────────────────────────────────────────────────────────────
+termux-wake-lock 2>/dev/null && echo "[OK] wake-lock ativo" || echo "[WARN] wake-lock indisponível"
+
+echo "[ws-protect v2.0] Concluído."
