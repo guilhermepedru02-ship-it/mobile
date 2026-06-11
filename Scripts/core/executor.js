@@ -16,6 +16,28 @@ function validateAndResolvePath(targetPath) {
 }
 
 // ==========================================
+// LOG COM ROTAÇÃO AUTOMÁTICA — máx 200 KB
+// Evita crescimento ilimitado que pressiona a RAM
+// ==========================================
+const LOG_MAX_BYTES = 200 * 1024; // 200 KB
+
+function writeAuditLog(logPath, message) {
+    try {
+        if (fs.existsSync(logPath)) {
+            const { size } = fs.statSync(logPath);
+            if (size >= LOG_MAX_BYTES) {
+                // Rotaciona: renomeia para .old (sobrescreve o anterior)
+                const oldPath = logPath.replace('.log', '.old.log');
+                fs.renameSync(logPath, oldPath);
+            }
+        }
+        fs.appendFileSync(logPath, message, 'utf8');
+    } catch (e) {
+        // Falha silenciosa — log nunca deve travar a execução
+    }
+}
+
+// ==========================================
 // MCP GATEKEEPER (Session State)
 // ==========================================
 let hasReadRules = false;
@@ -47,12 +69,12 @@ const BLACKLISTED_COMMANDS = [
 const BIOMETRIC_GATE_SCRIPT = '/data/data/com.termux/files/home/storage/shared/Workspace/Scripts/core/biometric_gate.sh';
 
 const BIOMETRIC_COMMANDS = [
-    { pattern: /git.*push/,          label: 'git push para GitHub' },
-    { pattern: /termux-sms-send/,         label: 'envio de SMS' },
-    { pattern: /sms-send/,               label: 'envio de SMS' },
-    { pattern: /\.env/,                    label: 'acesso ao arquivo .env' },
-    { pattern: /cat.*\.env/,               label: 'leitura do .env' },
-    { pattern: /BRIDGE_TOKEN/,           label: 'acesso a tokens sensiveis' },
+    { pattern: /\bgit\b.*\bpush\b/,          label: 'git push para GitHub' },
+    { pattern: /\btermux-sms-send\b/,         label: 'envio de SMS' },
+    { pattern: /\bsms-send\b/,               label: 'envio de SMS' },
+    { pattern: /\.env\b/,                    label: 'acesso ao arquivo .env' },
+    { pattern: /cat\b.*\.env/,               label: 'leitura do .env' },
+    { pattern: /\bBRIDGE_TOKEN\b/,           label: 'acesso a tokens sensiveis' },
 ];
 
 const BIOMETRIC_PATHS = [
@@ -62,7 +84,6 @@ const BIOMETRIC_PATHS = [
 function verifyBiometricRequirement(action) {
     let label = null;
 
-    // Verifica run_command
     if (action.type === 'run_command' && action.command) {
         for (const rule of BIOMETRIC_COMMANDS) {
             if (rule.pattern.test(action.command)) {
@@ -72,7 +93,6 @@ function verifyBiometricRequirement(action) {
         }
     }
 
-    // Verifica operacoes de escrita em 00_Sistema
     const writingOps = ['create_file', 'append_file', 'write_file', 'delete_file', 'move_file'];
     if (!label && writingOps.includes(action.type)) {
         const targetPath = action.path || action.dest || action.destination || '';
@@ -81,14 +101,11 @@ function verifyBiometricRequirement(action) {
         }
     }
 
-    if (!label) return; // nao requer biometria
+    if (!label) return;
 
-    // Dispara o gate biometrico (sincrono — bloqueia ate ter resposta)
     try {
         execSync(`bash "${BIOMETRIC_GATE_SCRIPT}" "${label}"`, { stdio: 'pipe', timeout: 30000 });
-        // exit 0 = autorizado — continua normalmente
     } catch (err) {
-        // exit 1 = negado/cancelado; exit 2 = unavailable
         const exitCode = err.status || 1;
         const reason = exitCode === 2 ? 'BIOMETRIC_UNAVAILABLE' : 'AUTH_DENIED';
         throw new Error(`SECURITY ALERT: Operacao bloqueada pelo gate biometrico (${reason}): ${label}`);
@@ -105,25 +122,21 @@ function verifyCommandSafety(command) {
 
 
 // ==============================================================================
-// TTS NARRATOR v2.0 — Narração imersiva, robústa e obrigatória
-// PRE-acao: anuncia o que vai fazer (contextual, não genérico)
-// POS-acao: narra o resultado real com dados extraidos da resposta
-// A IA não controla isso — o executor dispara sempre, automaticamente.
+// TTS NARRATOR v2.0
 // ==============================================================================
 const BRIDGE_TTS_URL           = 'http://127.0.0.1:4444/bridge/tts';
 const BRIDGE_TOKEN_CLAUDE      = process.env.BRIDGE_TOKEN_CLAUDE      || '';
 const BRIDGE_TOKEN_ANTIGRAVITY = process.env.BRIDGE_TOKEN_ANTIGRAVITY || '';
-const BRIDGE_TOKEN_QWEN        = process.env.BRIDGE_TOKEN_QWEN        || '';
+const BRIDGE_TOKEN_MANUS       = process.env.BRIDGE_TOKEN_MANUS       || '';
 
+// IAs externas que se conectam via SSE/MCP: Claude, Antigravity, Manus
+// Qwen é IA local — roda via llama-server, não usa este mapa
 const IA_TOKEN_MAP = {
   claude:      BRIDGE_TOKEN_CLAUDE,
   antigravity: BRIDGE_TOKEN_ANTIGRAVITY,
-  qwen_local:  BRIDGE_TOKEN_QWEN,
+  manus:       BRIDGE_TOKEN_MANUS,
 };
 
-/**
- * Envia texto para fila TTS via Bridge. Fire-and-forget.
- */
 function ttsSpeak(iaName, text) {
   if (!text) return;
   const token = IA_TOKEN_MAP[iaName?.toLowerCase()] || BRIDGE_TOKEN_CLAUDE;
@@ -143,10 +156,6 @@ function ttsSpeak(iaName, text) {
   }
 }
 
-/**
- * PRE-ACAO: narra o que a IA vai fazer, com contexto real do action.
- * Cobre todos os tipos de acao — nada fica sem voz.
- */
 function buildPreNarration(iaName, action) {
   const n = iaName || 'IA';
   const file = (action.path || action.dest || action.destination || '').split('/').pop();
@@ -154,14 +163,13 @@ function buildPreNarration(iaName, action) {
 
   switch (action.type) {
     case 'run_command': {
-      // Narra contexto real do comando, nao apenas o binario
       if (/git.*push/.test(cmd))        return `${n}: enviando código para o GitHub`;
       if (/git.*commit/.test(cmd))      return `${n}: registrando commit no repositório`;
       if (/git.*status/.test(cmd))      return `${n}: verificando status do repositório`;
       if (/git.*log/.test(cmd))         return `${n}: lendo histórico de commits`;
       if (/pkill|kill/.test(cmd))       return `${n}: encerrando processo`;
       if (/node.*server|node.*mcp/.test(cmd)) return `${n}: iniciando servidor`;
-      if (/curl.*bridge\/tts/.test(cmd))      return null; // silencia auto-narracoes
+      if (/curl.*bridge\/tts/.test(cmd))      return null;
       if (/curl.*bridge\/battery/.test(cmd))  return `${n}: lendo bateria do dispositivo`;
       if (/curl.*bridge\/wifi/.test(cmd))      return `${n}: lendo status do Wi-Fi`;
       if (/curl.*bridge\/location/.test(cmd))  return `${n}: obtendo localização GPS`;
@@ -171,28 +179,28 @@ function buildPreNarration(iaName, action) {
       if (/npm.*run/.test(cmd))        return `${n}: executando script npm`;
       if (/python3?/.test(cmd))        return `${n}: executando script Python`;
       if (/termux-sms-send/.test(cmd)) return `${n}: enviando SMS — aguardando biometria`;
-      if (/termux-fingerprint/.test(cmd)) return null; // silencia o gate em si
+      if (/termux-fingerprint/.test(cmd)) return null;
       if (/free -m|df -h/.test(cmd))   return `${n}: verificando uso de memória e disco`;
       if (/ps aux/.test(cmd))          return `${n}: listando processos ativos`;
       if (/cat.*\.env/.test(cmd))      return `${n}: acessando variáveis de ambiente`;
       if (/tail.*log/.test(cmd))       return `${n}: lendo logs do sistema`;
       if (/sed |awk |grep /.test(cmd)) return `${n}: processando arquivo de texto`;
-      // Generico — extrai binario
+      if (/oom_score/.test(cmd))       return `${n}: ajustando prioridade de memória`;
       const bin = cmd.split(/\s+/)[0].replace(/.*\//, '');
       return `${n}: executando ${bin}`;
     }
     case 'read_file':
-      if ((action.path||'').includes('kanban'))    return `${n}: lendo kanban de tarefas`;
-      if ((action.path||'').includes('README'))    return `${n}: carregando diretivas do sistema`;
-      if ((action.path||'').includes('seguranca')) return `${n}: verificando camadas de segurança`;
-      if ((action.path||'').includes('system_prompt')) return `${n}: carregando protocolo operacional`;
+      if ((action.path||'').includes('kanban'))       return `${n}: lendo kanban de tarefas`;
+      if ((action.path||'').includes('README'))       return `${n}: carregando diretivas do sistema`;
+      if ((action.path||'').includes('seguranca'))    return `${n}: verificando camadas de segurança`;
+      if ((action.path||'').includes('system_prompt'))return `${n}: carregando protocolo operacional`;
       if ((action.path||'').includes('Memoria-RAG')) return `${n}: consultando memória de longo prazo`;
-      if ((action.path||'').includes('tool_registry')) return `${n}: carregando registro de ferramentas`;
+      if ((action.path||'').includes('tool_registry'))return `${n}: carregando registro de ferramentas`;
       return `${n}: lendo ${file}`;
     case 'create_file':
       if ((action.path||'').includes('Memoria-RAG')) return `${n}: registrando memória de longo prazo`;
-      if ((action.path||'').includes('04_Diario'))  return `${n}: escrevendo entrada no diário`;
-      if ((action.path||'').includes('03_Tarefas')) return `${n}: atualizando tarefas no kanban`;
+      if ((action.path||'').includes('04_Diario'))   return `${n}: escrevendo entrada no diário`;
+      if ((action.path||'').includes('03_Tarefas'))  return `${n}: atualizando tarefas no kanban`;
       return `${n}: criando arquivo ${file}`;
     case 'append_file':
       return `${n}: atualizando ${file} com novos dados`;
@@ -203,20 +211,15 @@ function buildPreNarration(iaName, action) {
     case 'index_cerebro':
       return `${n}: reindexando toda a base de conhecimento`;
     case 'list_directory':
-      return null; // silencioso — operacao de leitura simples
+      return null;
     default:
       return null;
   }
 }
 
-/**
- * POS-ACAO: extrai dados reais do resultado e narra de forma natural.
- * Só narra se o resultado tiver dados relevantes.
- */
 function buildPostNarration(iaName, action, result) {
   const n = iaName || 'IA';
   if (!result || !result.success) {
-    // Narra falhas em operações criticas
     const criticalTypes = ['create_file', 'append_file', 'delete_file', 'run_command'];
     if (criticalTypes.includes(action.type)) {
       return `${n}: operação falhou — ${(result?.error || 'erro desconhecido').slice(0, 60)}`;
@@ -229,8 +232,6 @@ function buildPostNarration(iaName, action, result) {
   switch (action.type) {
     case 'run_command': {
       const out = (result.stdout || '').trim();
-
-      // Diagnóstico de bateria
       if (/bridge\/battery/.test(cmd)) {
         try {
           const d = JSON.parse(out).data;
@@ -240,7 +241,6 @@ function buildPostNarration(iaName, action, result) {
           return `${n}: bateria ${d.percentage} por cento, ${statusPT}, temperatura ${d.temperature} graus`;
         } catch(e) {}
       }
-      // Diagnostico Wi-Fi
       if (/bridge\/wifi/.test(cmd)) {
         try {
           const d = JSON.parse(out).data;
@@ -249,7 +249,6 @@ function buildPostNarration(iaName, action, result) {
           return `${n}: Wi-Fi ${d.ssid}, ${freq}, sinal ${sinal}`;
         } catch(e) {}
       }
-      // Diagnostico GPS/Location
       if (/bridge\/location/.test(cmd)) {
         try {
           const d = JSON.parse(out).data;
@@ -258,23 +257,15 @@ function buildPostNarration(iaName, action, result) {
           return `${n}: localização obtida, latitude ${lat}, longitude ${lng}`;
         } catch(e) {}
       }
-      // Health check MCP
       if (/health/.test(cmd) && out.includes('version')) {
         try {
           const d = JSON.parse(out);
           return `${n}: servidor MCP versão ${d.version} online, ${d.activeSessions} sessões ativas`;
         } catch(e) {}
       }
-      // Memoria RAM (free -m)
       if (/free -m/.test(cmd)) {
         try {
-          const d = JSON.parse(out);
-          const pct = Math.round(d.used / d.total * 100);
-          return `${n}: memória ${d.used} de ${d.total} megabytes em uso, ${pct} por cento`;
-        } catch(e) {
-          // fallback para output texto padrao do free
-          const lines = out.split('
-');
+          const lines = out.split('\n');
           const memLine = lines.find(l => l.startsWith('Mem:'));
           if (memLine) {
             const parts = memLine.split(/\s+/);
@@ -285,13 +276,11 @@ function buildPostNarration(iaName, action, result) {
               return `${n}: memória ${used} de ${total} megabytes em uso, ${pct} por cento`;
             }
           }
-        }
+        } catch(e) {}
       }
-      // Disco (df -h)
       if (/df -h/.test(cmd)) {
         try {
-          const lines = out.split('
-');
+          const lines = out.split('\n');
           const sdcard = lines.find(l => l.includes('/storage/emulated') || l.includes('/sdcard'));
           const internal = lines.find(l => l.match(/\s\/\s*$/));
           const target = sdcard || internal;
@@ -301,38 +290,28 @@ function buildPostNarration(iaName, action, result) {
           }
         } catch(e) {}
       }
-      // Processos ativos (ps aux)
       if (/ps aux/.test(cmd) || /ps -e/.test(cmd)) {
-        const lines = out.split('
-').filter(l => l.trim());
-        const count = Math.max(0, lines.length - 1); // exclui header
+        const lines = out.split('\n').filter(l => l.trim());
+        const count = Math.max(0, lines.length - 1);
         return `${n}: ${count} processos ativos no sistema`;
       }
-      // Git commit
       if (/git.*commit/.test(cmd) && out.length > 0) {
-        // Tenta extrair hash curto
         const hashMatch = out.match(/\[.*?\s+([a-f0-9]{6,8})\]/);
         const hash = hashMatch ? ` ${hashMatch[1]}` : '';
         return `${n}: commit${hash} realizado com sucesso`;
       }
-      // Git push
-      if (/git.*push/.test(cmd)) {
-        return `${n}: código enviado ao GitHub com sucesso`;
-      }
-      // Git diff — conta mudancas
+      if (/git.*push/.test(cmd))   return `${n}: código enviado ao GitHub com sucesso`;
       if (/git.*diff/.test(cmd)) {
         const adds = (out.match(/^\+/gm) || []).length;
         const dels = (out.match(/^-/gm) || []).length;
         if (adds || dels) return `${n}: ${adds} linhas adicionadas, ${dels} removidas`;
         return `${n}: sem diferenças encontradas`;
       }
-      // Git log — quantos commits
       if (/git.*log/.test(cmd)) {
         const commits = (out.match(/^commit /gm) || []).length;
         if (commits) return `${n}: ${commits} commits encontrados no histórico`;
         return null;
       }
-      // Git status — resumo
       if (/git.*status/.test(cmd)) {
         if (out.includes('nothing to commit')) return `${n}: repositório limpo, sem alterações pendentes`;
         if (out.includes('modified')) {
@@ -341,93 +320,68 @@ function buildPostNarration(iaName, action, result) {
         }
         return null;
       }
-      // npm install
       if (/npm.*install/.test(cmd) && result.success) {
         const pkgs = out.match(/(\d+) packages/);
         return pkgs ? `${n}: ${pkgs[1]} pacotes instalados com sucesso` : `${n}: dependências instaladas com sucesso`;
       }
-      // npm run — script concluído
-      if (/npm.*run/.test(cmd) && result.success) {
-        return `${n}: script npm concluído com sucesso`;
-      }
-      // python3
+      if (/npm.*run/.test(cmd) && result.success) return `${n}: script npm concluído com sucesso`;
       if (/python3?/.test(cmd) && result.success && out.length < 200) {
         return out.length > 0 ? `${n}: Python concluído — ${out.slice(0,80)}` : `${n}: script Python executado com sucesso`;
       }
-      // Servidor iniciado
-      if (/node.*server|node.*mcp/.test(cmd) && result.success) {
-        return `${n}: servidor iniciado com sucesso`;
-      }
-      // Silencia resultados sem stdout relevante
+      if (/node.*server|node.*mcp/.test(cmd) && result.success) return `${n}: servidor iniciado com sucesso`;
+      if (/oom_score/.test(cmd) && result.success) return `${n}: proteção de memória aplicada com sucesso`;
       return null;
     }
     case 'read_file':
-      // Só narra read_file se for leitura relevante (não polui com cada leitura)
-      if ((action.path||'').includes('README'))    return `${n}: diretivas do sistema carregadas`;
-      if ((action.path||'').includes('system_prompt')) return `${n}: protocolo operacional carregado`;
-      return null; // leituras genéricas: silencioso
+      if ((action.path||'').includes('README'))       return `${n}: diretivas do sistema carregadas`;
+      if ((action.path||'').includes('system_prompt'))return `${n}: protocolo operacional carregado`;
+      return null;
     case 'create_file':
       if ((action.path||'').includes('Memoria-RAG')) return `${n}: memória gravada com sucesso`;
-      if ((action.path||'').includes('04_Diario'))  return `${n}: diário atualizado`;
-      if ((action.path||'').includes('03_Tarefas')) return `${n}: kanban atualizado`;
+      if ((action.path||'').includes('04_Diario'))   return `${n}: diário atualizado`;
+      if ((action.path||'').includes('03_Tarefas'))  return `${n}: kanban atualizado`;
       return `${n}: arquivo criado com sucesso`;
-    case 'append_file':
-      return `${n}: atualização concluída`;
-    case 'delete_file':
-      return `${n}: arquivo removido com sucesso`;
-    case 'move_file':
-      return `${n}: arquivo movido com sucesso`;
+    case 'append_file':   return `${n}: atualização concluída`;
+    case 'delete_file':   return `${n}: arquivo removido com sucesso`;
+    case 'move_file':     return `${n}: arquivo movido com sucesso`;
     case 'search_files': {
       const count = (result.matches || []).length;
       return count > 0
         ? `${n}: busca concluída, ${count} arquivo${count !== 1 ? 's' : ''} encontrado${count !== 1 ? 's' : ''}`
         : `${n}: nenhum arquivo encontrado para a busca`;
     }
-    case 'index_cerebro':
-      return `${n}: reindexacao concluída`;
-    default:
-      return null;
+    case 'index_cerebro': return `${n}: reindexacao concluída`;
+    default: return null;
   }
 }
 
-/**
- * Dispara narração PRE-acao. Chamado antes de executar.
- */
 function narrateAction(iaName, action) {
-  const text = buildPreNarration(iaName, action);
-  ttsSpeak(iaName, text);
+  ttsSpeak(iaName, buildPreNarration(iaName, action));
 }
 
-/**
- * Dispara narração POS-acao com resultado real. Chamado apos executar.
- */
 function narrateResult(iaName, action, result) {
-  const text = buildPostNarration(iaName, action, result);
-  ttsSpeak(iaName, text);
+  ttsSpeak(iaName, buildPostNarration(iaName, action, result));
 }
 
 export async function processAgentAction(action, iaName = 'workspace') {
-    // Registro determinístico em log para auditoria posterior
     const logPath = path.join(WORKSPACE_ROOT, 'Logs', 'executor-audit.log');
-    
-    // Assegura que o diretório de logs exista
+
     if (!fs.existsSync(path.dirname(logPath))) {
         fs.mkdirSync(path.dirname(logPath), { recursive: true });
     }
 
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] [${iaName}] Executando: ${action.type}\n`, 'utf8');
+    // Log com rotação automática — nunca cresce além de 200 KB
+    writeAuditLog(logPath, `[${new Date().toISOString()}] [${iaName}] Executando: ${action.type}\n`);
 
-    // TTS NARRATOR — disparo automático obrigatório
     narrateAction(iaName, action);
 
     // ==========================================
     // GATEKEEPER ENFORCEMENT
     // ==========================================
     const now = Date.now();
-    // Se passou muito tempo desde a ultima acao, relock o ambiente (Inatividade)
     if (now - lastActionTime > SESSION_TIMEOUT_MS) {
         hasReadRules = false;
-        fs.appendFileSync(logPath, `[GATEKEEPER] Sessao expirada por inatividade. Ambiente bloqueado novamente.\n`, 'utf8');
+        writeAuditLog(logPath, `[GATEKEEPER] Sessao expirada por inatividade. Ambiente bloqueado novamente.\n`);
     }
     lastActionTime = now;
 
@@ -435,18 +389,17 @@ export async function processAgentAction(action, iaName = 'workspace') {
 
     if (!hasReadRules && !isTargetingReadme) {
         const blockMsg = "ACCESS DENIED (GATEKEEPER MCP): Voce nao leu as Diretivas do Sistema. Sua primeira acao deve ser usar 'read_file' no arquivo 'Cerebro/00_Sistema/README.md' para destravar a sessao.";
-        fs.appendFileSync(logPath, `[BLOCKED] Tentativa de usar ${action.type} antes de ler as regras.\n`, 'utf8');
+        writeAuditLog(logPath, `[BLOCKED] Tentativa de usar ${action.type} antes de ler as regras.\n`);
         return { success: false, error: blockMsg };
     }
 
     if (isTargetingReadme && !hasReadRules) {
         hasReadRules = true;
-        fs.appendFileSync(logPath, `[UNLOCKED] Regras lidas pela IA. Ambiente destravado.\n`, 'utf8');
+        writeAuditLog(logPath, `[UNLOCKED] Regras lidas pela IA. Ambiente destravado.\n`);
     }
     // ==========================================
 
     try {
-        // Helper: narra resultado e retorna — garante que narrateResult SEMPRE dispara
         const narrate = (result) => { narrateResult(iaName, action, result); return result; };
 
         switch (action.type) {
@@ -491,8 +444,8 @@ export async function processAgentAction(action, iaName = 'workspace') {
                 verifyBiometricRequirement(action);
                 const { stdout, stderr } = await execPromise(action.command, {
                     cwd: WORKSPACE_ROOT,
-                    timeout: 60000, // Timeout hard de 60 segundos por instrução
-                    maxBuffer: 1024 * 1024 * 10 // Alocação máxima de 10MB para stdout
+                    timeout: 60000,
+                    maxBuffer: 1024 * 1024 * 10
                 });
                 return narrate({
                     success: true,
@@ -556,11 +509,8 @@ export async function processAgentAction(action, iaName = 'workspace') {
                     for (const entry of entries) {
                         const fullPath = path.join(currentPath, entry.name);
                         const secureEntryPath = validateAndResolvePath(path.relative(WORKSPACE_ROOT, fullPath));
-                        
                         if (entry.isDirectory()) {
-                            if (isRecursive) {
-                                searchDir(secureEntryPath);
-                            }
+                            if (isRecursive) searchDir(secureEntryPath);
                         } else if (entry.isFile()) {
                             try {
                                 const content = fs.readFileSync(secureEntryPath, 'utf8');
@@ -570,9 +520,7 @@ export async function processAgentAction(action, iaName = 'workspace') {
                                         name: entry.name
                                     });
                                 }
-                            } catch (e) {
-                                // Ignora binarios ou erros de leitura
-                            }
+                            } catch (e) {}
                         }
                     }
                 }
@@ -580,9 +528,6 @@ export async function processAgentAction(action, iaName = 'workspace') {
                 searchDir(securePath);
                 return narrate({ success: true, matches: matches });
             }
-            // ==========================================
-            // NOVAS OPERAÇÕES: RAG SOBERANO
-            // ==========================================
             case "index_cerebro": {
                 const { indexCerebro } = await import('./vector_db.js');
                 const indexResult = await indexCerebro();
@@ -601,8 +546,9 @@ export async function processAgentAction(action, iaName = 'workspace') {
                 return narrate({ success: false, error: `Operação binária '${action.type}' não homologada.` });
         }
     } catch (err) {
-        fs.appendFileSync(logPath, `[ERROR - ${new Date().toISOString()}] Falha: ${err.message}\n`, 'utf8');
+        writeAuditLog(logPath, `[ERROR - ${new Date().toISOString()}] Falha: ${err.message}\n`);
         const errResult = { success: false, error: err.message };
         narrateResult(iaName, action, errResult);
         return errResult;
+    }
 }
