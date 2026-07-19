@@ -1,0 +1,31 @@
+# Chronos-VPS — Caddyfile
+# Substitui Serveo/ngrok: HTTPS automático (Let's Encrypt) num domínio fixo,
+# sem "o link muda toda vez que o túnel cai".
+#
+# TAREFA JULES: trocar chronos.SEUDOMINIO.com pelo domínio real do usuário
+# (precisa de um registro DNS tipo A apontando pro IP da VPS).
+
+chronos.SEUDOMINIO.com {
+    # MCP Server — SSE para IAs externas (Claude, Antigravity, Cursor, etc.)
+    # O token continua indo via query string (?token=...), igual ao esquema
+    # já usado no SKILL_restabelecer_conexao.md original.
+    handle /sse* {
+        reverse_proxy mcp-server:3001
+    }
+    handle /messages* {
+        reverse_proxy mcp-server:3001
+    }
+    handle /health {
+        reverse_proxy mcp-server:3001
+    }
+
+    # Hub PWA — painel de controle
+    handle /* {
+        reverse_proxy hub-pwa:5555
+    }
+
+    encode gzip
+    log {
+        output file /data/access.log
+    }
+}
