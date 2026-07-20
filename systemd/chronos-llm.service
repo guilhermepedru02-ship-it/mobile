@@ -1,0 +1,15 @@
+[Unit]
+Description=Chronos LLM (llama-server)
+After=network.target
+
+[Service]
+Type=simple
+User=chronos
+WorkingDirectory=/opt/chronos-vps/llm
+ExecStart=/opt/chronos-vps/llm/start_llama_server.sh
+Restart=always
+RestartSec=5
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=multi-user.target
