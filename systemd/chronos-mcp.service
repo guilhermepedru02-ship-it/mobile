@@ -1,0 +1,21 @@
+[Unit]
+Description=Chronos MCP Server
+After=network.target chronos-llm.service
+Requires=chronos-llm.service
+
+[Service]
+Type=simple
+User=chronos
+WorkingDirectory=/opt/chronos-vps/mcp-server
+EnvironmentFile=/opt/chronos-vps/.env
+Environment=WORKSPACE_ROOT=/opt/chronos-vps/cerebro-root
+ExecStart=/usr/bin/node mcp_server.js
+Restart=always
+RestartSec=5
+# Substitui o protect_pid()/oom_score_adj que falhava silenciosamente no Android:
+# no Linux normal (sem sandbox restrito), isso funciona de verdade.
+OOMScoreAdjust=-900
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target
