@@ -14,6 +14,7 @@ service-account.json
 
 # Logs e Performance
 Logs/
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -30,21 +31,8 @@ temp/
 
 # Working Memory — JSONs individuais de sessão (ruído para o Git)
 # São consolidados diariamente em *_consolidated.md
-Cerebro/Memoria-RAG/*_wm_*.json
-
-# Arquivos de desenvolvimento/debug temporários
-Scripts/core/nohup_v3.out
-Scripts/core/core
-Scripts/core/patch_*.py
-Scripts/core/_test_payload.json
-Scripts/core/test_*.mjs
-Scripts/core/test_*.js
-
-# Obsidian — estado local da interface (não versionável)
-Cerebro/.obsidian/workspace.json
-Cerebro/.obsidian/workspace-mobile.json
-Cerebro/.obsidian/graph.json
-Cerebro/.obsidian/appearance.json
+cerebro/02_Memoria-RAG/*_wm_*.json
+cerebro/Memoria-RAG/*_wm_*.json
 
 # Backups Locais
 *.zip
@@ -52,7 +40,7 @@ Cerebro/.obsidian/appearance.json
 *.7z
 
 # Modelos de IA (arquivos grandes — nunca versionar)
-Models/
+llm/models/
 *.gguf
 *.bin
 *.safetensors
