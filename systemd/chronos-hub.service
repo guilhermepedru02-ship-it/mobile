@@ -1,0 +1,15 @@
+[Unit]
+Description=Chronos Hub PWA
+After=network.target chronos-mcp.service
+
+[Service]
+Type=simple
+User=chronos
+WorkingDirectory=/opt/chronos-vps/hub-pwa
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
