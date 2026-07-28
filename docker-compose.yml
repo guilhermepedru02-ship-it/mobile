@@ -1,0 +1,114 @@
+version: "3.9"
+
+# ============================================================
+# CHRONOS-VPS — orquestração completa
+# Substitui: tmux + protect_pid() + ws-protect.sh do Termux
+# por systemd/Docker restart policies nativas do Linux.
+# ============================================================
+
+services:
+
+  # ---- Modelo de linguagem local (substitui llama-server no Termux) ----
+  llm:
+    build: ./llm
+    container_name: chronos-llm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"   # só localhost — o mcp-server fala com ele internamente
+    volumes:
+      - ./llm/models:/models
+    environment:
+      - MODEL_PATH=/models/${LLM_MODEL_FILE:-qwen2.5-7b-instruct-q4_k_m.gguf}
+      - CTX_SIZE=${LLM_CTX_SIZE:-4096}
+    mem_limit: ${LLM_MEM_LIMIT:-10g}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ---- MCP Server + Executor + Dispatch + RAG (o núcleo do Chronos) ----
+  mcp-server:
+    build: ./mcp-server
+    container_name: chronos-mcp
+    restart: unless-stopped
+    depends_on:
+      llm:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3001"     # exposto ao mundo só via Caddy (HTTPS)
+    volumes:
+      - ./cerebro:/app/cerebro-root/Cerebro
+      - ./logs:/app/cerebro-root/Logs
+      - ./scripts:/app/cerebro-root/Scripts
+    environment:
+      - WORKSPACE_ROOT=/app/cerebro-root
+      - LLM_BASE_URL=http://llm:11434
+      - API_SECRET_KEY=${API_SECRET_KEY}
+      - NODE_OPTIONS=--max-old-space-size=${MCP_HEAP_MB:-512}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ---- Bot do Telegram (interface principal do usuário) ----
+  telegram-bot:
+    build: ./telegram-bot
+    container_name: chronos-bot
+    restart: unless-stopped
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    volumes:
+      - ./cerebro:/app/cerebro-root/Cerebro:ro
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - MCP_SERVER_URL=http://mcp-server:3001
+      - LLM_BASE_URL=http://llm:11434
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    # Fallback em nuvem (Gemini) opcional — mantém o padrão multi-camada
+    # já validado no Chronos mobile (local -> cloud fallback).
+
+  # ---- Hub PWA (painel de controle web) ----
+  hub-pwa:
+    build: ./hub-pwa
+    container_name: chronos-hub
+    restart: unless-stopped
+    depends_on:
+      - mcp-server
+    ports:
+      - "127.0.0.1:5555:5555"
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:3001
+
+  # ---- Cron leve para consolidação diária do RAG (substitui o cron do Termux) ----
+  rag-consolidator:
+    build: ./mcp-server
+    container_name: chronos-rag-cron
+    restart: unless-stopped
+    entrypoint: ["sh", "-c", "while true; do sleep 86400; node consolidate_rag.js; done"]
+    volumes:
+      - ./cerebro:/app/cerebro-root/Cerebro
+    environment:
+      - WORKSPACE_ROOT=/app/cerebro-root
+
+  # ---- Reverse proxy HTTPS automático (substitui Serveo/ngrok) ----
+  caddy:
+    image: caddy:2-alpine
+    container_name: chronos-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - mcp-server
+      - hub-pwa
+
+volumes:
+  caddy_data:
+  caddy_config:
