@@ -1,0 +1,17 @@
+[Unit]
+Description=Chronos Telegram Bot
+After=network.target chronos-mcp.service
+Requires=chronos-mcp.service
+
+[Service]
+Type=simple
+User=chronos
+WorkingDirectory=/opt/chronos-vps/telegram-bot
+EnvironmentFile=/opt/chronos-vps/.env
+ExecStart=/usr/bin/node bot.js
+Restart=always
+RestartSec=5
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
